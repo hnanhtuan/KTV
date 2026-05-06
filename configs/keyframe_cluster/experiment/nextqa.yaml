@@ -5,3 +5,4 @@ video_frame_tensor_path: ktv/save_tensor/NExTQA
 save_cluster_path: outputs/nextqa_keyframes
 combined_output_path: outputs/nextqa_keyframe6_order.json
 dataset: NExTQA
+device: cpu

@@ -19,9 +19,31 @@ import os
 import numpy as np
 import random
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
-model_clip, preprocess_clip = clip.load("ViT-L/14", device=device)
+device = "cpu"
+model_clip = None
+preprocess_clip = None
 processed_video = dict()
+
+
+def select_device(device_name):
+    """Select a torch device, falling back to CPU when CUDA is unavailable."""
+    if device_name == "auto":
+        device_name = "cuda" if torch.cuda.is_available() else "cpu"
+    if device_name == "cuda" and not torch.cuda.is_available():
+        print("CUDA requested but unavailable; using CPU instead.")
+        device_name = "cpu"
+    return device_name
+
+
+def load_clip_model(device_name):
+    """Load CLIP on the configured device after Hydra config is available."""
+    global device, model_clip, preprocess_clip
+    device = select_device(device_name)
+    if model_clip is None:
+        model_clip, preprocess_clip = clip.load("ViT-L/14", device=device)
+    else:
+        model_clip.to(device)
+    print(f"Using CLIP device: {device}")
 
 def load_frame(video_path, num_clips=1, num_frms=4):
     # Currently, this function supports only 1 clip
@@ -478,6 +500,7 @@ def resolve_path(path):
 
 @hydra.main(config_path="configs/keyframe_cluster", config_name="config", version_base=None)
 def main(cfg: DictConfig):
+    load_clip_model(cfg.device)
     cluster(
         resolve_path(cfg.json_path),
         resolve_path(cfg.video_path),

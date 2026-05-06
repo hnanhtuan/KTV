@@ -8,6 +8,7 @@ video_frame_tensor_path: ???
 save_cluster_path: ???
 combined_output_path: null
 dataset: NExTQA
+device: cpu
 
 hydra:
   job:

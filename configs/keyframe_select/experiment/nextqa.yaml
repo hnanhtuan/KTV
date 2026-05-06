@@ -3,3 +3,4 @@ json_path: playground/gt_qa_files/NExTQA/val_qa.json
 video_path: datasets/NExTQA/videos
 save_tensor_path: ktv/save_tensor/NExTQA
 dataset: NExTQA
+device: cpu

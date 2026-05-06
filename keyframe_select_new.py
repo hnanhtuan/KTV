@@ -32,11 +32,31 @@ fast_transform = transforms.Compose([
 # model.to(device)
 
 model_name_hf = "facebook/dinov2-large"
-model = Dinov2Model.from_pretrained(model_name_hf)
-hf_processor = AutoImageProcessor.from_pretrained(model_name_hf)
-model.eval()
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu") #if you use ASCEND npu  device = torch.device("npu")
-model.to(device)
+model = None
+hf_processor = None
+device = torch.device("cpu")
+
+
+def select_device(device_name):
+    """Select a torch device, falling back to CPU when CUDA is unavailable."""
+    if device_name == "auto":
+        device_name = "cuda" if torch.cuda.is_available() else "cpu"
+    if device_name == "cuda" and not torch.cuda.is_available():
+        print("CUDA requested but unavailable; using CPU instead.")
+        device_name = "cpu"
+    return torch.device(device_name)
+
+
+def load_dino_model(device_name):
+    """Load DINOv2 on the configured device after Hydra config is available."""
+    global model, hf_processor, device
+    device = select_device(device_name)
+    if model is None:
+        model = Dinov2Model.from_pretrained(model_name_hf)
+        hf_processor = AutoImageProcessor.from_pretrained(model_name_hf)
+        model.eval()
+    model.to(device)
+    print(f"Using DINOv2 device: {device}")
 
 
 def get_frame_indices(total_frames, max_frames):
@@ -178,7 +198,8 @@ def dino_feature_stream(video_path, model, device, indices, batch_size=128):
             batch_features = outputs.pooler_output.cpu().numpy()
             features.extend(batch_features)
             del batch_tensors
-            torch.cuda.empty_cache()
+            if device.type == "cuda":
+                torch.cuda.empty_cache()
 
     container.close()
     return features
@@ -352,6 +373,7 @@ def resolve_path(path):
 
 @hydra.main(config_path="configs/keyframe_select", config_name="config", version_base=None)
 def main(cfg: DictConfig):
+    load_dino_model(cfg.device)
     dinov2(
         resolve_path(cfg.json_path),
         resolve_path(cfg.video_path),
