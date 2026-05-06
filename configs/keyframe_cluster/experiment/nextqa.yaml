@@ -1,3 +1,4 @@
+# @package _global_
 # Cluster DINOv2 frame features and rank NExTQA keyframes with CLIP.
 json_path: playground/gt_qa_files/NExTQA/val_qa.json
 video_path: datasets/NExTQA/videos

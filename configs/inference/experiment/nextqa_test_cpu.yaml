@@ -1,3 +1,4 @@
+# @package _global_
 # CPU NExTQA validation experiment.
 device: cpu
 video_dir: datasets/NExTQA/videos

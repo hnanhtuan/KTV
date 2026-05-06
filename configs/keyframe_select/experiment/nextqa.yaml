@@ -1,3 +1,4 @@
+# @package _global_
 # Extract DINOv2 frame features for NExTQA.
 json_path: playground/gt_qa_files/NExTQA/val_qa.json
 video_path: datasets/NExTQA/videos

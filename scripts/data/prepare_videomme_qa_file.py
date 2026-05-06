@@ -51,9 +51,9 @@ def main(args, task_name="Videomme"):
                 "answer": answer,
             })
 
-    folder = f"/mnt/data/sby/ktv/playground/gt_qa_files/Videomme"
+    folder = args.output_dir
     os.makedirs(folder, exist_ok=True)
-    with open(f"/mnt/data/sby/ktv/playground/gt_qa_files/Videomme/val_qa.json", "w") as f:
+    with open(os.path.join(folder, "val_qa.json"), "w") as f:
         json.dump(data_list_info, f, indent=4)
 
 
@@ -62,7 +62,16 @@ def parse_args():
     Parse command-line arguments.
     """
     parser = argparse.ArgumentParser()
-    parser.add_argument("--qa_file", help="Path to Videomme.csv", default='/mnt/data/sby/ktv/playground/gt_qa_files/Videomme/val_qa.csv')
+    parser.add_argument(
+        "--qa_file",
+        help="Path to Videomme.csv",
+        default="playground/gt_qa_files/Videomme/val_qa.csv",
+    )
+    parser.add_argument(
+        "--output_dir",
+        help="Directory where val_qa.json will be written",
+        default="playground/gt_qa_files/Videomme",
+    )
     return parser.parse_args()
 
 

@@ -4,3 +4,7 @@ outputs/
 .venv/
 
 __pycache__/
+
+demo.ipynb
+
+ktv/save_tensor/

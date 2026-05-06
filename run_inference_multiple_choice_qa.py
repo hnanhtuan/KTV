@@ -5,10 +5,12 @@
 import os
 import sys
 from pathlib import Path
+from typing import Any, Optional, Sequence, Tuple, Union
 # sys.path.insert(0, Path(__file__).parent.as_posix())
 sys.path.insert(0, os.path.join(Path(__file__).parent.as_posix(), "ktv"))
 import json
 import hydra
+from PIL import Image
 from tqdm import tqdm
 import torch       #for cuda device
 # import torch_npu  for npu device
@@ -35,26 +37,26 @@ def resolve_path(path):
 
 
 def llava_inference(
-    video_frames,
-    question,
-    candidates,
-    conv_mode,
-    model,
-    tokenizer,
-    image_processor,
-    image_sizes,
-    temperature,
-    top_p,
-    num_beams,
-    temporal_aggregation,
-    keyframe_order=None,
-    num_frames=None,
-    prune_mode = None,
-    global_rate = None,
-    tokens_num = None,
-    device = "cuda",
-    dtype = torch.float16,
-):
+    video_frames: Sequence[Image.Image],
+    question: str,
+    candidates: Sequence[str],
+    conv_mode: str,
+    model: Any,
+    tokenizer: Any,
+    image_processor: Any,
+    image_sizes: Sequence[Tuple[int, int]],
+    temperature: float,
+    top_p: Optional[float],
+    num_beams: int,
+    temporal_aggregation: Optional[str],
+    keyframe_order: Optional[Sequence[int]] = None,
+    num_frames: Optional[int] = None,
+    prune_mode: Optional[str] = None,
+    global_rate: Optional[float] = None,
+    tokens_num: Optional[int] = None,
+    device: Union[str, torch.device] = "cuda",
+    dtype: torch.dtype = torch.float16,
+) -> str:
     # Get multiple choice prompt
     prompt = get_multiple_choice_prompt(model, conv_mode, question, candidates)
     # print(prompt)
