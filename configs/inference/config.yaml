@@ -1,0 +1,41 @@
+defaults:
+  - _self_
+  - experiment: null
+
+# Required dataset and model paths. Set these in an experiment config or as CLI overrides.
+video_dir: ???
+gt_file: ???
+output_dir: ???
+output_name: ???
+model_path: ???
+
+# Model loading.
+model_base: null
+conv_mode: vicuna_v1
+rope_scaling_factor: 1
+device: auto
+
+# Dataset sharding.
+num_chunks: 1
+chunk_idx: 0
+
+# Video and keyframe settings.
+num_frames: 100
+input_structure: image_seq
+image_aspect_ratio: null
+key_frame_path: null
+
+# Generation settings.
+temperature: 0.2
+top_p: null
+num_beams: 1
+temporal_aggregation: null
+
+# Token pruning settings.
+prune_mode: null
+rate: null
+tokens_num: 936
+
+hydra:
+  job:
+    chdir: false

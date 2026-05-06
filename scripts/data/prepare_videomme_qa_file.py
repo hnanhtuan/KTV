@@ -24,9 +24,9 @@ def main(args, task_name="Videomme"):
             # print(cleaned)
             # exit(0)
             # print(cleaned)
-            # 用正则按选项切分（匹配大写字母+句点开头的部分）
+            # Split options with a regex that matches entries starting with an uppercase letter and period.
             items = re.findall(r"[A-Z]\.\s.*?(?=(?:[A-Z]\.|$))", cleaned)
-            # 去掉多余空格
+            # Remove extra spaces.
             candidates = [x.strip() for x in items]
             # print(candidates)
             # print(answer)

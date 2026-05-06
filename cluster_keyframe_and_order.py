@@ -226,11 +226,9 @@ def extract_selected_frames(video_path, indices):
             
     return extracted_frames_pil
 
-def video_frame_clustering(frame_features, num_cluster=5):
+def video_frame_clustering(frame_features: np.ndarray, num_cluster: int=5):
     
-
-    total_cluster = []
-
+    """Cluster video frames using K-means and return the indices of the cluster centers."""
     kmeans = KMeans(n_clusters=num_cluster, random_state=0, init='k-means++', n_init=10).fit(frame_features)
     labels = kmeans.labels_
     cluster_centers = kmeans.cluster_centers_
@@ -247,7 +245,6 @@ def video_frame_clustering(frame_features, num_cluster=5):
     return cluster_center_indices
 
 
-    
 def get_original_frame_number(
     total_original_frames: int,
     index_in_extracted_list: int,  
@@ -299,148 +296,140 @@ def get_original_frame_number(
     return original_frame_index_0_based
 
 
-def cluster(json_path, video_path, video_frame_tensor_path, save_cluster_path,dataset):
-    print(1)
-    if not os.path.exists(save_cluster_path):
-        os.makedirs(save_cluster_path)
-    with open(video_frame_tensor_path, 'rb') as f:
-        data = pickle.load(f)
-    video_frame_tensor = dict()
-    for key, value in data.items():
-        video_frame_tensor[key] = value
-    video_name_total = []
-    prompt_total = []
-    question_id_total = []
-    data_tpye_total = []
-    ts_total = []
-    start_total = []
-    end_total = []
-    with open(json_path, 'r')as f:
-        data = json.load(f)
-    for i in data:
-        # video_path_total.append(i['video_path'])
-        video_name_total.append(i['video_name'])
-        # video_name_total.append(i['video'])
-        prompt_total.append(i['question'])
-        question_id_total.append(i['question_id'])
-        # data_tpye_total.append(i['data_type'])
-        # ts_total.append(i['ts'])
-        # start_total.append(i['start'])
-        # end_total.append(i['end'])
-    print(2)
-    save_cluster = []
-    save_cluster_prompt = []
-    save_cluster_6 = []
-    video_order = []
-    save_list = []
+def cluster(json_path, video_path, video_frame_tensor_path, save_cluster_path, dataset):
+    """Select question-aware keyframes and save their ranked order per question."""
+    # This function first uses precomputed DINOv2 frame features to find diverse
+    # candidate frames, then uses CLIP to rank those candidates against the question.
+    num_keyframes = 12
+    max_frames_to_extract = 5400
 
-    num_cluster = [12]
-    m=0
-    # for video_path, prompt, question_id,data_type,ts,start,end in tqdm(zip(video_path_total, prompt_total, question_id_total,data_tpye_total,ts_total,start_total,end_total), total=len(video_path_total)):
-    for video_name, prompt, question_id in tqdm(zip(video_name_total, prompt_total, question_id_total), total=len(video_name_total)):
-        m+=1
-        full_video_path = os.path.join(video_path,video_name)
+    # Create the output folder that will hold one JSON file per question.
+    os.makedirs(save_cluster_path, exist_ok=True)
+
+    # Load the precomputed DINOv2 features produced by keyframe_select_new.py.
+    # Expected shape per video: one feature vector for each sampled frame.
+    with open(video_frame_tensor_path, 'rb') as f:
+        video_frame_tensor = dict(pickle.load(f))
+
+    # Load the QA metadata. Each item tells us which video and question to process.
+    with open(json_path, 'r') as f:
+        qa_data = json.load(f)
+
+    for sample in tqdm(qa_data, total=len(qa_data)):
+        # Pull the fields needed to locate the video, rank frames for the question,
+        # and name the per-question output JSON.
+        video_name = sample['video_name']
+        prompt = sample['question']
+        question_id = sample['question_id']
+
+        # Skip samples that were already processed in a previous run.
         output_path = os.path.join(save_cluster_path, f'{question_id}.json')
         if os.path.exists(output_path):
             continue
-    # for video in tqdm(video_total, total=len(video_total)):
-        cluster_frame_total = []
-        data_type = None
-        if data_type =='frame':
-            fps = 3
-            total_frames = len(os.listdir(video_path))
-        else:
-            cap = cv2.VideoCapture(full_video_path)
-            fps = cap.get(cv2.CAP_PROP_FPS)
-            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-            
-            cap.release()
-        # full_video_path = video_path
-        
-        # if ts:
-        #     ts = [start, end]
-        # else:
-        #     ts =None
-        # cluster_num = 6
-        try:
-            # tensor = video_frame_tensor[question_id]
-            tensor = video_frame_tensor[video_name]
-        except:
+
+        # Read video metadata so indices from the sampled DINO feature list can be
+        # mapped back to original video frame numbers.
+        full_video_path = os.path.join(video_path, video_name)
+        cap = cv2.VideoCapture(full_video_path)
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        cap.release()
+
+        # Fetch this video's DINOv2 feature matrix. If it is missing, this question
+        # cannot be clustered, so skip it.
+        tensor = video_frame_tensor.get(video_name)
+        if tensor is None:
             print('error', question_id)
             continue
-  
-        # if ts and type!='frame' and (int(end*fps)-int(start*fps)>6):
-        #     tensor = tensor[int(start*fps):int(end*fps)]
-        # try:
+
+        # KMeans selects diverse candidate frames by finding the frame nearest to
+        # each cluster center in DINOv2 feature space.
         print(len(tensor))
-        cluster_frame_temp = video_frame_clustering(tensor,num_cluster[0])
-        cluster_frame_total.append(cluster_frame_temp)
-        print('cluster_frame_temp',cluster_frame_temp)
-        cluster_frame_total_original = []
+        clustered_indices = video_frame_clustering(tensor, num_keyframes)
+        print('cluster_frame_temp', clustered_indices)
 
-        for i in cluster_frame_total[0]:
-            cluster_frame_total_original.append(get_original_frame_number(total_frames,i,fps=fps,max_frames_to_extract=5400))
-        set_temp = set(cluster_frame_total_original)
-        # print('cluster_frame_total_original',cluster_frame_total_original)
-        if len(set_temp)!=12:
-            temp = np.linspace(0, float(total_frames), 12, endpoint=False)
-            cluster_frame_total_original = []
-            for i in temp:
-                cluster_frame_total_original.append(int(i))
-        print('original_frame',cluster_frame_total_original)
-        # exit(0)
-        # frames_cluster, _ = load_video(full_video_path,cluster_frame_total_original,start=start,end=end)
-        frames_cluster, _ = load_video(full_video_path,cluster_frame_total_original,start=None,end=None)
-        # except:
-            # # continue
-            # # error+=1
-            # temp = np.linspace(0, float(total_frames), 6, endpoint=False)
-            # cluster_frame_total_original = []
-            # for i in temp:
-            #     cluster_frame_total_original.append(int(i))
-            # frames_cluster, _ = load_video(full_video_path,cluster_frame_total_original,start=None,end=None)
-            
-        temp = []
-        batch = []
-        for i in frames_cluster:
-            batch.append(preprocess_clip(i))
-        prompt_new = prompt.split(' ')
-        print('prompt_len',len(prompt_new))
-        if len(prompt_new)>40:
-            prompt_new = prompt_new[10:50]
-            prompt = ""
-            for j in prompt_new:
-                prompt+=j
-                prompt+=' '
-            prompt=prompt[:-1]
+        # DINO features may have been extracted from at most max_frames_to_extract
+        # sampled frames. Convert those sampled-list indices back to original frame IDs.
+        candidate_frame_indices = [
+            get_original_frame_number(
+                total_frames,
+                index,
+                fps=fps,
+                max_frames_to_extract=max_frames_to_extract,
+            )
+            for index in clustered_indices
+        ]
 
-        
+        # If mapping creates duplicate original frame IDs, fall back to evenly spaced
+        # frames so the downstream CLIP ranking still receives num_keyframes candidates.
+        if len(set(candidate_frame_indices)) != num_keyframes:
+            candidate_frame_indices = [
+                int(index)
+                for index in np.linspace(0, float(total_frames), num_keyframes, endpoint=False)
+            ]
 
-        for i in range(0, len(batch), 12):
-            image_input = torch.tensor(np.stack(batch[i:i+12])).to(device)
-            with torch.no_grad():
-                image_features = model_clip.encode_image(image_input.to(device))
-                print('question',prompt)
-                text_input = clip.tokenize([prompt]).to(device)
-                text_features = model_clip.encode_text(text_input.to(device))
-                image_features /= image_features.norm(dim=-1, keepdim=True)
-                text_features /= text_features.norm(dim=-1, keepdim=True)
-                similarity = 100.0 * image_features @ text_features.T
-       
+        print('candidate_frame_indices', candidate_frame_indices)
+        # Load the actual image frames for the candidate original frame indices.
+        frames_cluster, _ = load_video(
+            full_video_path,
+            candidate_frame_indices,
+            start=None,
+            end=None,
+        )
+
+        # Convert candidate frames into CLIP input tensors.
+        image_batch = [preprocess_clip(frame) for frame in frames_cluster]
+
+        # CLIP has a limited text context. For long questions, keep a middle slice
+        # that likely contains the most useful content words.
+        prompt_words = prompt.split(' ')
+        print('prompt_len', len(prompt_words))
+        if len(prompt_words) > 40:
+            prompt = ' '.join(prompt_words[10:50])
+
+        # Encode candidate frames and the question with CLIP, normalize both feature
+        # sets, then compute image-text similarity scores.
+        image_input = torch.stack(image_batch).to(device)
+        with torch.no_grad():
+            print('question', prompt)
+            image_features = model_clip.encode_image(image_input)
+            text_input = clip.tokenize([prompt]).to(device)
+            text_features = model_clip.encode_text(text_input)
+
+            image_features /= image_features.norm(dim=-1, keepdim=True)
+            text_features /= text_features.norm(dim=-1, keepdim=True)
+            similarity = 100.0 * image_features @ text_features.T
+
         print(similarity)
-        top_k_values, top_k_indices = torch.topk(similarity.squeeze(), 12)
+        # Rank candidates by CLIP similarity. The highest scoring frame gets rank 0.
+        top_k_count = min(num_keyframes, similarity.numel())
+        _, top_k_indices = torch.topk(similarity.squeeze(), top_k_count)
         print(top_k_indices)
-        top_k_cluster_indices = [cluster_frame_total_original[i] for i in top_k_indices]
-        key_frame_order = []
-        for index, i in enumerate(top_k_cluster_indices):
-            key_frame_order.append([i,index])
-        temp = dict()
-        temp[question_id] = key_frame_order
-        print(temp)
-        # with open(output_path, 'w') as f:
-        #     json.dump(temp, f, ensure_ascii=False, indent=4)
+
+        # Convert ranked candidate positions back to original video frame numbers.
+        top_keyframes = [
+            candidate_frame_indices[int(index)]
+            for index in top_k_indices
+        ]
+
+        # Store each selected frame with its rank. In inference, this order is used
+        # to allocate more visual tokens to more question-relevant keyframes.
+        key_frame_order = [
+            [frame_index, rank]
+            for rank, frame_index in enumerate(top_keyframes)
+        ]
+
+        # Save one JSON file per question: {question_id: [[frame_index, rank], ...]}.
+        result = {question_id: key_frame_order}
+        print(result)
         with open(output_path, 'w', encoding='utf-8') as f:
-            json.dump(temp, f, ensure_ascii=False, indent=4, default=lambda o: int(o) if isinstance(o, np.integer) else o)
+            json.dump(
+                result,
+                f,
+                ensure_ascii=False,
+                indent=4,
+                default=lambda o: int(o) if isinstance(o, np.integer) else o,
+            )
 
 
 json_path_videomme_test = 'ktv/playground/gt_qa_files/Videomme/val_qa.json'
@@ -448,4 +437,3 @@ save_tensor_path_videomme_test = 'ktv/save_tensor/Videomme.pkl'
 video_path_videomme = 'datasets/Video-MME/data'
 save_cluster_path_videomme_test = 'videomme_test_json_temp12'
 cluster(json_path_videomme_test, video_path_videomme,save_tensor_path_videomme_test, save_cluster_path_videomme_test,'videomme')
-

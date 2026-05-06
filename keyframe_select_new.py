@@ -24,7 +24,7 @@ fast_transform = transforms.Compose([
 # model.eval()
 # model_path = '/home/pengjun/.cache/torch/hub/facebookresearch_dinov2_main'
 # # print(2)
-# # 如果有CUDA可用，则将模型移动到GPU
+# # If CUDA is available, move the model to the GPU.
 # device = torch.device("cuda:2") if torch.cuda.is_available() else torch.device("cpu")
 # model.to(device)
 
@@ -37,12 +37,14 @@ model.to(device)
 
 
 def get_frame_indices(total_frames, max_frames):
+    """Return evenly spaced frame indices, capped at max_frames."""
     if total_frames <= max_frames:
         return np.arange(total_frames)
     else:
         return np.linspace(0, total_frames - 1, max_frames, dtype=int)
 
 def get_index( bound, fps, max_frame, first_idx=0):
+        """Convert an optional time range into frame indices for JPG frame folders."""
         if bound:
             start, end = bound[0], bound[1]
         else:
@@ -54,6 +56,7 @@ def get_index( bound, fps, max_frame, first_idx=0):
         return frame_indices
     
 def read_jpg_frame( video_path, bound=None, fps=3):
+        """Load JPG frames from a frame folder for an optional time range."""
         print(video_path)
         max_frame = len(os.listdir(video_path))
         frames = list()
@@ -66,6 +69,7 @@ def read_jpg_frame( video_path, bound=None, fps=3):
         return frames
     
 # def extract_selected_frames(video_path, indices):
+#     """Read selected video frames sequentially with OpenCV."""
 #     cap = cv2.VideoCapture(video_path)
 #     total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
 #     if total == 0:
@@ -88,15 +92,15 @@ def read_jpg_frame( video_path, bound=None, fps=3):
 
 # def extract_selected_frames(video_path, indices):
 #     """
-#     用 PyAV 高效提取视频中指定索引的帧。
-#     :param video_path: 视频路径
-#     :param indices: 要提取的帧索引列表
-#     :return: PIL.Image 列表
+#     Use PyAV to efficiently extract frames at the specified indices.
+#     :param video_path: video path
+#     :param indices: list of frame indices to extract
+#     :return: PIL.Image list
 #     """
 #     container = av.open(video_path)
 #     stream = container.streams.video[0]
 
-#     # 强制精确解码
+#     # Force exact decoding.
 #     stream.codec_context.skip_frame = "NONE"
 #     stream.thread_type = "AUTO"
 
@@ -116,24 +120,26 @@ def read_jpg_frame( video_path, bound=None, fps=3):
 #     return frames
 
 # def extract_selected_frames(video_path, indices):
-#     # 创建视频读取器（可改为 gpu(0) 启用GPU加速）
+#     """Batch-read selected frames with Decord and return them as PIL images."""
+#     # Create a video reader. Use gpu(0) to enable GPU acceleration.
 #     vr = VideoReader(video_path, ctx=cpu(0))
 #     total = len(vr)
 
-#     # 过滤并排序索引
+#     # Filter and sort indices.
 #     valid_indices = sorted([i for i in indices if 0 <= i < total])
 #     if not valid_indices:
 #         return []
 
-#     # 批量读取指定帧（一次性提取，速度非常快）
+#     # Batch-read the specified frames in one call, which is very fast.
 #     frames = vr.get_batch(valid_indices).asnumpy()  # shape: (num_frames, H, W, 3)
 
-#     # 转为 PIL.Image 列表
+#     # Convert to a PIL.Image list.
 #     images = [Image.fromarray(frame) for frame in frames]
 #     return images
 
 
 def dino_feature_stream(video_path, model, device, indices, batch_size=128):
+    """Decode selected video frames and extract pooled DINOv2 features in batches."""
     container = av.open(video_path)
     stream = container.streams.video[0]
     frames = []
@@ -148,21 +154,21 @@ def dino_feature_stream(video_path, model, device, indices, batch_size=128):
                 img = frame.to_ndarray(format='rgb24')
                 img = Image.fromarray(img)
                 frames.append(fast_transform(img))
-                # 到达批次大小 → 提特征 + 清理
+                # Extract features and clean up once the batch is full.
                 if len(frames) >= batch_size:
                     batch_tensors = torch.stack(frames).to(device)
                     outputs = model(pixel_values=batch_tensors)
                     batch_features = outputs.pooler_output.cpu().numpy()
                     features.extend(batch_features)
                     print('process done')
-                    # 清空缓存
+                    # Clear the cache.
                     del batch_tensors, frames[:]
                     # torch.cuda.empty_cache()
             current_idx += 1
             if current_idx > max_idx:
                 break
 
-        # 剩余帧处理
+        # Process remaining frames.
         if frames:
             batch_tensors = torch.stack(frames).to(device)
             outputs = model(pixel_values=batch_tensors)
@@ -177,12 +183,12 @@ def dino_feature_stream(video_path, model, device, indices, batch_size=128):
 
 # def dino_feature_stream_decord(video_path, model, device, indices, batch_size=128):
 #     """
-#     使用 Decord 高效提帧 + DINOv2 提特征
-#     自动选择 GPU 解码（NVDEC）或 CPU 解码
+#     Use Decord to efficiently extract frames and DINOv2 features.
+#     Automatically choose GPU decoding (NVDEC) or CPU decoding.
 #     """
 
 
-#     # ✅ 自动检测 GPU 是否可用
+#     # Automatically detect whether the GPU is available.
 #     # if torch.cuda.is_available() and decord.gpu_enabled():
 #     #     ctx = gpu(0)
 #     #     print("✅ Using Decord GPU decoding (NVDEC)")
@@ -190,14 +196,14 @@ def dino_feature_stream(video_path, model, device, indices, batch_size=128):
 #     ctx = cpu(0)
 
 
-#     # 读取视频
+#     # Read the video.
 #     vr = VideoReader(video_path, ctx=ctx)
 #     total_frames = len(vr)
 #     if total_frames == 0:
 #         print(f"⚠️ Empty or unreadable video: {video_path}")
 #         return []
 
-#     # 过滤有效索引
+#     # Filter valid indices.
 #     indices = np.array([i for i in indices if 0 <= i < total_frames])
 #     if len(indices) == 0:
 #         print(f"⚠️ No valid frame indices for {video_path}")
@@ -205,18 +211,18 @@ def dino_feature_stream(video_path, model, device, indices, batch_size=128):
 
 #     features = []
 
-#     # ⚡ 按 batch 提取帧并处理（高效）
+#     # Extract and process frames by batch efficiently.
 #     with torch.no_grad():
 #         for i in range(0, len(indices), batch_size):
 #             batch_idx = indices[i:i + batch_size]
 
-#             # Decord 批量取帧 (GPU/CPU 自动)
+#             # Batch-read frames with Decord, automatically using GPU or CPU.
 #             batch_frames = vr.get_batch(batch_idx).asnumpy()  # (B, H, W, 3)
-#             # 转 PIL + transform
+#             # Convert to PIL and transform.
 #             imgs = [fast_transform(Image.fromarray(img)) for img in batch_frames]
 #             batch_tensors = torch.stack(imgs).to(device, non_blocking=True)
 
-#             # DINO 提特征
+#             # Extract DINO features.
 #             outputs = model(pixel_values=batch_tensors)
 #             batch_features = outputs.pooler_output.cpu().numpy()
 #             features.extend(batch_features)
@@ -229,6 +235,7 @@ def dino_feature_stream(video_path, model, device, indices, batch_size=128):
 #     return features
 
 def dino_feature_optimized(video_path, data_type=None, ts=None,batch_size=256, target_frames=5400):
+    """Select frames from a video and run the streaming DINOv2 feature extractor."""
     if data_type=='frame':
         print('frame')
         frames = read_jpg_frame(video_path, ts)
@@ -260,7 +267,7 @@ def dino_feature_optimized(video_path, data_type=None, ts=None,batch_size=256, t
     #     batch_tensors = inputs.to(device, non_blocking=True)  
     #     print('process done')
     #     with torch.no_grad():
-    #         outputs = model(pixel_values=batch_tensors)   # <-- 注意：用 keyword 参数
+    #         outputs = model(pixel_values=batch_tensors)   # <-- Note: use a keyword argument.
     #         batch_features = outputs.pooler_output
 
     #     # with torch.no_grad():
@@ -272,6 +279,7 @@ def dino_feature_optimized(video_path, data_type=None, ts=None,batch_size=256, t
 
 
 def dinov2(json_path, video_path, save_tensor_path, dataset):
+    """Extract and save DINOv2 frame features for each video listed in a QA JSON file."""
     
     if not os.path.exists(save_tensor_path):
         os.makedirs(save_tensor_path)
@@ -333,5 +341,3 @@ json_path_videomme = 'ktv/playground/gt_qa_files/Videomme/val_qa.json'
 video_path_videomme = 'datasets/Video-MME/data'
 save_tensor_path_videomme = 'ktv/save_tensor/Videomme'
 dinov2(json_path_videomme, video_path_videomme, save_tensor_path_videomme, 'Videomme')
-
-

@@ -135,6 +135,18 @@ class LlavaMetaForCausalLM(ABC):
         return self.get_model().get_vision_tower()
 
     def encode_images(self, images,keyframe_order=None, num_frames=None, prune_mode=None,rate=None,tokens_num=None):
+        pruned_modes = {'cls_new_token_sim', 'uniform_token'}
+        if prune_mode not in pruned_modes:
+            if prune_mode is not None:
+                raise ValueError(f'Unsupported prune_mode: {prune_mode}')
+
+            image_features = self.get_model().get_vision_tower()(images, prune_mode)
+            image_features = image_features[:, 1:]
+            image_features = self.get_model().mm_projector(image_features)
+            if num_frames is not None:
+                image_features = image_features.flatten(0, 1).unsqueeze(0)
+            return image_features
+
         image_features, cls_att = self.get_model().get_vision_tower()(images,prune_mode)
         # cls_features = image_features[:, 0]
         # [frames, token_num(576), dimension]
@@ -185,7 +197,7 @@ class LlavaMetaForCausalLM(ABC):
                 # token features
                 #Efficient way to compute pairwise cosine similarity using matrix multiplication
                 token_sim = torch.sum(torch.matmul(features_normalized, features_normalized.t()).fill_diagonal_(0), dim=1)/575
-                # 冗余度 token 5 对其他575个token之间的cos sim rongyu score, avg
+                # Redundancy score: average cosine similarity between one token and the other 575 tokens.
                 normalized_token_sim = (token_sim - token_sim.min()) / (token_sim.max() - token_sim.min()) 
                 # 576 
                 # print(cls_normalized_cosine_sim.device)
@@ -355,7 +367,7 @@ class LlavaMetaForCausalLM(ABC):
             image_features = self.encode_images(images,keyframe_order, num_frames,prune_mode,global_rate,tokens_num)
             end_time = time.time()
 
-            print(f"执行时间: {end_time - start_time:.6f} 秒")
+            print(f"Execution time: {end_time - start_time:.6f} seconds")
             # exit(0)
         # if temporal_aggregation and \
         #    temporal_aggregation.lower() != 'none' and \

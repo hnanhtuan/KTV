@@ -1,0 +1,15 @@
+# Example Video-MME experiment matching the README command style.
+video_dir: datasets/Video-MME/data
+gt_file: ktv/playground/gt_qa_files/Videomme/val_qa.json
+output_dir: outputs
+output_name: videomme_6keyframe
+model_path: liuhaotian/llava-v1.6-vicuna-7b
+
+conv_mode: multiple_choice_allvideo_34b_v4
+num_frames: 6
+image_aspect_ratio: resize
+rope_scaling_factor: 2
+key_frame_path: nextqa_keyframe6_order.json
+prune_mode: cls_new_token_sim
+rate: 0.2
+tokens_num: 1872

@@ -1,1 +1,4 @@
-from ktv.llava.model import LlavaLlamaForCausalLM
+try:
+    from .model import LlavaLlamaForCausalLM
+except Exception:
+    pass

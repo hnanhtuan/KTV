@@ -81,28 +81,24 @@ class CLIPVisionTower(nn.Module):
         cls_attn = attn[:, 0, 1:].squeeze(0)
        
         # token_attn = attn[:, 1:, 1:].squeeze(0)
-        # mask = torch.eye(576).to(token_attn.device)  # 创建一个 576x576 的单位矩阵
-        # token_attn = token_attn * (1 - mask)  # 将对角线元素置为0
+        # mask = torch.eye(576).to(token_attn.device)  # Create a 576x576 identity matrix.
+        # token_attn = token_attn * (1 - mask)  # Set diagonal elements to 0.
         # token_attn = token_attn.sum(dim=1)
         # cls_attn = attn[:, 1:, 1:].squeeze(0)
         return image_features,cls_attn
     @torch.no_grad()
     def forward(self, images,prune_mode):
+        pruned_modes = {'cls_new_token_sim', 'cls_first_sim_second', 'uniform_token'}
         if type(images) is list:
             image_features = []
-            image_features_last = []
             for image in images:
                 image_forward_out = self.vision_tower(image.to(device=self.device, dtype=self.dtype).unsqueeze(0), output_hidden_states=True)
-                # image_project_out = self.projection_layer(image_forward_out)
-              
-                image_feature, image_feature_last = self.feature_select(image_forward_out).to(image.dtype)
+                image_feature = self.feature_select(image_forward_out).to(image.dtype)
                 image_features.append(image_feature)
-                image_features_last.append(image_feature_last)
         else:
-            if prune_mode=='cls_new_token_sim' or prune_mode=='cls_first_sim_second' or prune_mode == 'uniform_token':
+            if prune_mode in pruned_modes:
                 temp = []
                 cls_att = []
-                token_attn = []
                 for i in images:
                     feature, cls = self.token_prune(i.unsqueeze(0))
                     
@@ -110,9 +106,12 @@ class CLIPVisionTower(nn.Module):
                     cls_att.append(cls)
                   
                 image_features = torch.cat(temp)
+            else:
+                image_forward_out = self.vision_tower(images.to(device=self.device, dtype=self.dtype), output_hidden_states=True)
+                image_features = self.feature_select(image_forward_out).to(images.dtype)
            
         # print(prune_mode)
-        if prune_mode=='cls_new_token_sim' or prune_mode=='cls_first_sim_second' or prune_mode == 'uniform_token':
+        if prune_mode in pruned_modes:
             return image_features, cls_att
         else:
             return image_features
