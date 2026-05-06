@@ -1,0 +1,12 @@
+defaults:
+  - _self_
+  - experiment: null
+
+json_path: ???
+video_path: ???
+save_tensor_path: ???
+dataset: NExTQA
+
+hydra:
+  job:
+    chdir: false

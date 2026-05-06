@@ -45,19 +45,30 @@ You can also download them manually:
 
 ## Keyframe Preparation
 
+Keyframe extraction and clustering are also configured with Hydra:
+
+- `configs/keyframe_select/config.yaml`
+- `configs/keyframe_cluster/config.yaml`
+
 First extract DINOv2 frame features:
 
 ```bash
-uv run python keyframe_select_new.py
+uv run python keyframe_select_new.py experiment=nextqa
 ```
 
 Then cluster and rank keyframes for each test sample:
 
 ```bash
-uv run python cluster_keyframe_and_order.py
+uv run python cluster_keyframe_and_order.py experiment=nextqa
 ```
 
-The resulting keyframe JSON can be passed to inference through `key_frame_path`.
+The NExTQA clustering config writes the combined keyframe file to:
+
+```text
+outputs/nextqa_keyframe6_order.json
+```
+
+Pass that file to inference through `key_frame_path`.
 
 ## Inference
 
@@ -76,7 +87,12 @@ configs/inference/experiment/
 Run an existing experiment:
 
 ```bash
-uv run python run_inference_multiple_choice_qa.py experiment=nextqa_test_cpu
+uv run python run_inference_multiple_choice_qa.py \
+  experiment=nextqa_test_cpu \
+  key_frame_path=outputs/nextqa_keyframe6_order.json \
+  prune_mode=cls_new_token_sim \
+  rate=0.2 \
+  tokens_num=1872
 ```
 
 or:
@@ -109,6 +125,12 @@ Useful inference settings:
 - `rate`: alpha for balancing token importance and redundancy.
 - `tokens_num`: number of visual tokens sent to the LLM.
 - `device`: `auto`, `cuda`, or `cpu`.
+
+Keyframe behavior:
+
+- If `key_frame_path` is set, inference loads the selected keyframes from that JSON file.
+- If `key_frame_path` is `null` or omitted, inference does not process all video frames. It uniformly samples `num_frames` frames from each video.
+- For example, with `num_frames=6` and no `key_frame_path`, the VLM receives 6 uniformly sampled frames.
 
 For multi-GPU runs, set `CUDA_VISIBLE_DEVICES` before `uv run`:
 

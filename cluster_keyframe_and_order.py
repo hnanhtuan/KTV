@@ -4,10 +4,13 @@ from sklearn.cluster import KMeans
 import numpy as np
 from PIL import Image
 import av
+import hydra
 from tqdm import tqdm
 import csv
 import os
 import json
+from hydra.utils import to_absolute_path
+from omegaconf import DictConfig
 from torch.nn.parallel import DataParallel
 from torch.utils.data import Dataset, DataLoader
 import pickle
@@ -296,7 +299,22 @@ def get_original_frame_number(
     return original_frame_index_0_based
 
 
-def cluster(json_path, video_path, video_frame_tensor_path, save_cluster_path, dataset):
+def load_video_frame_tensor(video_frame_tensor_path):
+    """Load DINOv2 features from one pickle file or a directory of per-video pickles."""
+    if os.path.isdir(video_frame_tensor_path):
+        video_frame_tensor = {}
+        for filename in sorted(os.listdir(video_frame_tensor_path)):
+            if not filename.endswith('.pkl'):
+                continue
+            with open(os.path.join(video_frame_tensor_path, filename), 'rb') as f:
+                video_frame_tensor.update(pickle.load(f))
+        return video_frame_tensor
+
+    with open(video_frame_tensor_path, 'rb') as f:
+        return dict(pickle.load(f))
+
+
+def cluster(json_path, video_path, video_frame_tensor_path, save_cluster_path, dataset, combined_output_path=None):
     """Select question-aware keyframes and save their ranked order per question."""
     # This function first uses precomputed DINOv2 frame features to find diverse
     # candidate frames, then uses CLIP to rank those candidates against the question.
@@ -308,13 +326,13 @@ def cluster(json_path, video_path, video_frame_tensor_path, save_cluster_path, d
 
     # Load the precomputed DINOv2 features produced by keyframe_select_new.py.
     # Expected shape per video: one feature vector for each sampled frame.
-    with open(video_frame_tensor_path, 'rb') as f:
-        video_frame_tensor = dict(pickle.load(f))
+    video_frame_tensor = load_video_frame_tensor(video_frame_tensor_path)
 
     # Load the QA metadata. Each item tells us which video and question to process.
     with open(json_path, 'r') as f:
         qa_data = json.load(f)
 
+    combined_results = {}
     for sample in tqdm(qa_data, total=len(qa_data)):
         # Pull the fields needed to locate the video, rank frames for the question,
         # and name the per-question output JSON.
@@ -325,6 +343,8 @@ def cluster(json_path, video_path, video_frame_tensor_path, save_cluster_path, d
         # Skip samples that were already processed in a previous run.
         output_path = os.path.join(save_cluster_path, f'{question_id}.json')
         if os.path.exists(output_path):
+            with open(output_path, 'r', encoding='utf-8') as f:
+                combined_results.update(json.load(f))
             continue
 
         # Read video metadata so indices from the sampled DINO feature list can be
@@ -421,6 +441,7 @@ def cluster(json_path, video_path, video_frame_tensor_path, save_cluster_path, d
 
         # Save one JSON file per question: {question_id: [[frame_index, rank], ...]}.
         result = {question_id: key_frame_order}
+        combined_results.update(result)
         print(result)
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(
@@ -431,9 +452,41 @@ def cluster(json_path, video_path, video_frame_tensor_path, save_cluster_path, d
                 default=lambda o: int(o) if isinstance(o, np.integer) else o,
             )
 
+    if combined_output_path:
+        combined_output_dir = os.path.dirname(combined_output_path)
+        if combined_output_dir:
+            os.makedirs(combined_output_dir, exist_ok=True)
+        with open(combined_output_path, 'w', encoding='utf-8') as f:
+            json.dump(
+                combined_results,
+                f,
+                ensure_ascii=False,
+                indent=4,
+                default=lambda o: int(o) if isinstance(o, np.integer) else o,
+            )
 
-json_path_videomme_test = 'ktv/playground/gt_qa_files/Videomme/val_qa.json'
-save_tensor_path_videomme_test = 'ktv/save_tensor/Videomme.pkl'
-video_path_videomme = 'datasets/Video-MME/data'
-save_cluster_path_videomme_test = 'videomme_test_json_temp12'
-cluster(json_path_videomme_test, video_path_videomme,save_tensor_path_videomme_test, save_cluster_path_videomme_test,'videomme')
+
+def resolve_path(path):
+    """Resolve local Hydra config paths relative to the original launch directory."""
+    if path is None:
+        return None
+    path = os.path.expanduser(path)
+    if os.path.isabs(path):
+        return path
+    return to_absolute_path(path)
+
+
+@hydra.main(config_path="configs/keyframe_cluster", config_name="config", version_base=None)
+def main(cfg: DictConfig):
+    cluster(
+        resolve_path(cfg.json_path),
+        resolve_path(cfg.video_path),
+        resolve_path(cfg.video_frame_tensor_path),
+        resolve_path(cfg.save_cluster_path),
+        cfg.dataset,
+        combined_output_path=resolve_path(cfg.combined_output_path),
+    )
+
+
+if __name__ == "__main__":
+    main()

@@ -6,11 +6,14 @@ import pickle
 import torch
 import numpy as np
 from PIL import Image
+import hydra
 from tqdm import tqdm
 from decord import VideoReader, cpu,gpu
 from transformers import Dinov2Model, AutoImageProcessor
 from sklearn.cluster import KMeans
 import json
+from hydra.utils import to_absolute_path
+from omegaconf import DictConfig
 from torchvision import transforms
 fast_transform = transforms.Compose([
     transforms.Resize(256, interpolation=transforms.InterpolationMode.BICUBIC),
@@ -32,7 +35,7 @@ model_name_hf = "facebook/dinov2-large"
 model = Dinov2Model.from_pretrained(model_name_hf)
 hf_processor = AutoImageProcessor.from_pretrained(model_name_hf)
 model.eval()
-device = torch.device("cuda") #if you use ASCEND npu  device = torch.device("npu")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu") #if you use ASCEND npu  device = torch.device("npu")
 model.to(device)
 
 
@@ -337,7 +340,25 @@ def dinov2(json_path, video_path, save_tensor_path, dataset):
             with open(output_path, 'wb') as f:
                 pickle.dump(temp, f)
 
-json_path_videomme = 'ktv/playground/gt_qa_files/Videomme/val_qa.json'
-video_path_videomme = 'datasets/Video-MME/data'
-save_tensor_path_videomme = 'ktv/save_tensor/Videomme'
-dinov2(json_path_videomme, video_path_videomme, save_tensor_path_videomme, 'Videomme')
+def resolve_path(path):
+    """Resolve local Hydra config paths relative to the original launch directory."""
+    if path is None:
+        return None
+    path = os.path.expanduser(path)
+    if os.path.isabs(path):
+        return path
+    return to_absolute_path(path)
+
+
+@hydra.main(config_path="configs/keyframe_select", config_name="config", version_base=None)
+def main(cfg: DictConfig):
+    dinov2(
+        resolve_path(cfg.json_path),
+        resolve_path(cfg.video_path),
+        resolve_path(cfg.save_tensor_path),
+        cfg.dataset,
+    )
+
+
+if __name__ == "__main__":
+    main()
