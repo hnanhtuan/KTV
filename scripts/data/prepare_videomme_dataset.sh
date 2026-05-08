@@ -65,7 +65,10 @@ download_raw_dataset() {
     exit 1
   fi
 
-  download_cmd+=(--include "${HF_INCLUDE_PATTERNS[@]}")
+  local include_pattern
+  for include_pattern in "${HF_INCLUDE_PATTERNS[@]}"; do
+    download_cmd+=(--include "$include_pattern")
+  done
 
   download_cmd+=(
     --repo-type dataset

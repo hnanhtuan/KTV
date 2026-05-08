@@ -1,6 +1,10 @@
 #!/bin/bash
 set -euo pipefail
 
+export HF_HOME="${HF_HOME:-/tmp/ktv_hf_home}"
+export HF_HUB_CACHE="${HF_HUB_CACHE:-${HF_HOME}/hub}"
+export TRANSFORMERS_CACHE="${TRANSFORMERS_CACHE:-${HF_HOME}/transformers}"
+
 KEYFRAME_JSON="outputs/nextqa_keyframe6_order.json"
 
 uv run python keyframe_select_new.py experiment=nextqa

@@ -1,4 +1,29 @@
 import os
+
+DEFAULT_HF_HOME = "/tmp/ktv_hf_home"
+STALE_HF_HOME = "/workspace/.hf_home"
+
+
+def configure_hf_cache():
+    """Avoid stale file handles from the shared workspace Hugging Face cache."""
+    hf_home = os.environ.get("KTV_HF_HOME") or os.environ.get("HF_HOME")
+    if not hf_home or hf_home == STALE_HF_HOME:
+        hf_home = DEFAULT_HF_HOME
+        os.environ["HF_HOME"] = hf_home
+
+    hub_cache = os.environ.get("HF_HUB_CACHE") or os.environ.get("HUGGINGFACE_HUB_CACHE")
+    if not hub_cache or hub_cache.startswith(f"{STALE_HF_HOME}/"):
+        hub_cache = os.path.join(hf_home, "hub")
+        os.environ["HF_HUB_CACHE"] = hub_cache
+        os.environ["HUGGINGFACE_HUB_CACHE"] = hub_cache
+
+    transformers_cache = os.environ.get("TRANSFORMERS_CACHE")
+    if not transformers_cache or transformers_cache.startswith(f"{STALE_HF_HOME}/"):
+        os.environ["TRANSFORMERS_CACHE"] = os.path.join(hf_home, "transformers")
+
+
+configure_hf_cache()
+
 import csv
 import cv2
 import av
