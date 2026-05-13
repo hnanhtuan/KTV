@@ -8,3 +8,5 @@ __pycache__/
 demo.ipynb
 
 ktv/save_tensor/
+**.ipynb_checkpoints/
+ktv.egg-info/

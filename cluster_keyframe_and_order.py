@@ -336,6 +336,26 @@ def load_video_frame_tensor(video_frame_tensor_path):
         return dict(pickle.load(f))
 
 
+def get_tensor_for_video(video_frame_tensor, video_name):
+    """Resolve feature tensor for a video name with flexible extension handling."""
+    tensor = video_frame_tensor.get(video_name)
+    if tensor is not None:
+        return tensor
+
+    stem, _ = os.path.splitext(video_name)
+    if stem:
+        tensor = video_frame_tensor.get(stem)
+        if tensor is not None:
+            return tensor
+
+    for ext in (".mp4", ".avi", ".mov", ".mkv", ".webm"):
+        tensor = video_frame_tensor.get(f"{video_name}{ext}")
+        if tensor is not None:
+            return tensor
+
+    return None
+
+
 def cluster(json_path, video_path, video_frame_tensor_path, save_cluster_path, dataset, combined_output_path=None):
     """Select question-aware keyframes and save their ranked order per question."""
     # This function first uses precomputed DINOv2 frame features to find diverse
@@ -355,6 +375,7 @@ def cluster(json_path, video_path, video_frame_tensor_path, save_cluster_path, d
         qa_data = json.load(f)
 
     combined_results = {}
+    missing_tensor_count = 0
     for sample in tqdm(qa_data, total=len(qa_data)):
         # Pull the fields needed to locate the video, rank frames for the question,
         # and name the per-question output JSON.
@@ -379,9 +400,10 @@ def cluster(json_path, video_path, video_frame_tensor_path, save_cluster_path, d
 
         # Fetch this video's DINOv2 feature matrix. If it is missing, this question
         # cannot be clustered, so skip it.
-        tensor = video_frame_tensor.get(video_name)
+        tensor = get_tensor_for_video(video_frame_tensor, video_name)
         if tensor is None:
-            print('error', question_id)
+            missing_tensor_count += 1
+            print(f"missing_feature_tensor question_id={question_id} video_name={video_name}")
             continue
 
         # KMeans selects diverse candidate frames by finding the frame nearest to
@@ -486,6 +508,7 @@ def cluster(json_path, video_path, video_frame_tensor_path, save_cluster_path, d
                 indent=4,
                 default=lambda o: int(o) if isinstance(o, np.integer) else o,
             )
+    print(f"Finished clustering. skipped_missing_tensor={missing_tensor_count} total_questions={len(qa_data)}")
 
 
 def resolve_path(path):

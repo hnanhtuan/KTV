@@ -11,11 +11,10 @@ QA_OUTPUT_DIR="${4:-playground/gt_qa_files/Videomme}"
 HF_REPO_ID="${HF_REPO_ID:-lmms-lab/Video-MME}"
 DOWNLOAD_RAW="${DOWNLOAD_RAW:-auto}"
 HF_INCLUDE_PATTERNS=(
-  "videos_chunked_*.zip"
-  "subtitle.zip"
+  "*.zip"
+  "*/*.zip"
+  "*/*/*.zip"
   "README.md"
-  "videomme"
-  "videomme/*"
 )
 
 resolve_path() {
@@ -43,7 +42,13 @@ fi
 mkdir -p "$SOURCE_DIR"
 
 shopt -s nullglob
-zip_files=("${SOURCE_DIR}"/*.zip)
+zip_files=()
+
+refresh_zip_files() {
+  mapfile -t zip_files < <(find "$SOURCE_DIR" -type f -name '*.zip' | sort)
+}
+
+refresh_zip_files
 
 download_raw_dataset() {
   echo "Downloading VideoMME raw dataset from Hugging Face"
@@ -96,7 +101,7 @@ case "$DOWNLOAD_RAW" in
     ;;
 esac
 
-zip_files=("${SOURCE_DIR}"/*.zip)
+refresh_zip_files
 if (( ${#zip_files[@]} == 0 )); then
   echo "ERROR: no .zip files found in: $SOURCE_DIR" >&2
   echo "Set DOWNLOAD_RAW=always to download them, or place the VideoMME zip files there manually." >&2

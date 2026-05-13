@@ -1,0 +1,9 @@
+# @package _global_
+# Cluster DINOv2 frame features and rank Video-MME keyframes with CLIP.
+json_path: playground/gt_qa_files/Videomme/val_qa.json
+video_path: datasets/Video-MME/data
+video_frame_tensor_path: ktv/save_tensor/Video-MME
+save_cluster_path: outputs/videomme_keyframes
+combined_output_path: outputs/videomme_keyframe6_order.json
+dataset: Video-MME
+device: auto
