@@ -1,10 +1,10 @@
 # @package _global_
 # CPU NExTQA validation experiment.
-device: cpu
+device: cuda
 video_dir: datasets/NExTQA/videos
 gt_file: playground/gt_qa_files/NExTQA/val_qa.json
 output_dir: outputs
-output_name: nextqa_test_cpu
+output_name: nextqa
 model_path: liuhaotian/llava-v1.6-vicuna-7b
 
 conv_mode: multiple_choice_allvideo_34b_v4
