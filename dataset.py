@@ -2,7 +2,7 @@ import os
 import cv2
 import numpy as np
 from PIL import Image
-import random
+
 
 def load_frame(video_path, num_clips=1, num_frms=4):
     # Currently, this function supports only 1 clip
@@ -28,24 +28,26 @@ def load_frame(video_path, num_clips=1, num_frms=4):
 
     return clip_imgs, original_sizes
 
-def read_jpg_frame( video_path, keyframe,bound=None, fps=3):
-        # print(video_path)
-        frame_indices = keyframe
-        max_frame = len(os.listdir(video_path))
-        frames = list()
-        # frame_indices = get_index(None, fps, max_frame, first_idx=1) # frame_idx starts from 1
-        # print(frame_indices)
-        original_sizes = []
-        for frame_index in frame_indices:
-            frame_idx = frame_index[0]+1
-            print(frame_idx)
-            img = Image.open(os.path.join(video_path, f"{frame_idx:05d}.jpg"))
-            print(f"{frame_idx:05d}.jpg")
-            frames.append(img)
-            original_sizes.append(img.size)
-        # print('len(frames)',len(frames), original_sizes)
-        # exit(0)
-        return frames,tuple(original_sizes)
+
+def read_jpg_frame(video_path, keyframe, bound=None, fps=3):
+    # print(video_path)
+    frame_indices = keyframe
+    max_frame = len(os.listdir(video_path))
+    frames = list()
+    # frame_indices = get_index(None, fps, max_frame, first_idx=1) # frame_idx starts from 1
+    # print(frame_indices)
+    original_sizes = []
+    for frame_index in frame_indices:
+        frame_idx = frame_index[0] + 1
+        print(frame_idx)
+        img = Image.open(os.path.join(video_path, f"{frame_idx:05d}.jpg"))
+        print(f"{frame_idx:05d}.jpg")
+        frames.append(img)
+        original_sizes.append(img.size)
+    # print('len(frames)',len(frames), original_sizes)
+    # exit(0)
+    return frames, tuple(original_sizes)
+
 
 def load_video(video_path, keyframe=None, num_clips=1, num_frms=6):
     """
@@ -62,8 +64,8 @@ def load_video(video_path, keyframe=None, num_clips=1, num_frms=6):
 
     # Load video frame from a directory
     if os.path.isdir(video_path):
-        return read_jpg_frame(video_path,keyframe)
-    
+        return read_jpg_frame(video_path, keyframe)
+
     # Load video with OpenCV  if your device support decord package, we recommend to use decord instead of opencv: import decord
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
@@ -103,7 +105,7 @@ def load_video(video_path, keyframe=None, num_clips=1, num_frms=6):
             clip_imgs.append(img)
             original_sizes.append(img.size)
         except:
-            print('video_path', video_path,'\n','idx',idx)
+            print("video_path", video_path, "\n", "idx", idx)
 
     cap.release()
 

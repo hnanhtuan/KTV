@@ -7,20 +7,31 @@ def parse_args():
     parser = argparse.ArgumentParser()
     # parser.add_argument("--pred_path", default="/mnt/data/sby/qwen2.5-vl/Qwen2.5-VL-main/qwen2.5-vl-7b_4090/mlvu_test_qwen7b_rate_0.3_1000tokens.json", help="The path to file containing prediction.")
     # parser.add_argument("--old_path", default="/mnt/data/sby/qwen2.5-vl/Qwen2.5-VL-main/qwen2.5-vl-7b_4090/mlvu_test_6keyframe_qwen2.5-vl-7b_4090_rate_0.2_4090.json", help="The path to file containing ground truth.")
-    parser.add_argument("--pred_path", default="/mnt/data/sby/DYTO-main/llava_34b_4090/mlvu_test_6keyframe_dyto_llava34b_4090_rate_1_4090.json", help="The path to file containing prediction.")
-    parser.add_argument("--old_path", default="/mnt/data/sby/qwen2.5-vl/Qwen2.5-VL-main/qwen2.5-vl-7b_4090/videomme_6keyframe_qwen2.5-vl-7b_4090_rate_0.2_4090.json", help="The path to file containing ground truth.")
+    parser.add_argument(
+        "--pred_path",
+        default="/mnt/data/sby/DYTO-main/llava_34b_4090/mlvu_test_6keyframe_dyto_llava34b_4090_rate_1_4090.json",
+        help="The path to file containing prediction.",
+    )
+    parser.add_argument(
+        "--old_path",
+        default="/mnt/data/sby/qwen2.5-vl/Qwen2.5-VL-main/qwen2.5-vl-7b_4090/videomme_6keyframe_qwen2.5-vl-7b_4090_rate_0.2_4090.json",
+        help="The path to file containing ground truth.",
+    )
     # parser.add_argument("--pred_path", default="/mnt/data/sby/igvlm/qwen2.5-vl-7b_4090/ig_egoschema.json", help="The path to file containing prediction.")
     # parser.add_argument("--old_path", default="/mnt/data/sby/qwen2.5-vl/Qwen2.5-VL-main/qwen2.5-vl-7b_4090/egoschema_qwen7b_rate_0.3_1000tokens.json", help="The path to file containing ground truth.")
     # parser.add_argument("--pred_path", default="/mnt/data/sby/DYTO-main/llava_34b_4090/nextqa_6keyframe_dyto_llava34b_4090_rate_1_4090.json", help="The path to file containing prediction.")
     # parser.add_argument("--old_path", default="/mnt/data/sby/ktv/llava34b_4090/nextqa_6keyframe_llava34b_rate_1_1872_4090.json", help="The path to file containing ground truth.")
     # parser.add_argument("--pred_path", default="/mnt/data/sby/qwen2.5-vl/Qwen2.5-VL-main/qwen2.5-vl-7b_4090/intentqa_qwen7b_rate_0.6_1000tokens.json", help="The path to file containing prediction.")
     # parser.add_argument("--old_path", default="/mnt/data/sby/qwen2.5-vl/Qwen2.5-VL-main/qwen2.5-vl-7b_4090/intentqa_6keyframe_qwen2.5-vl-7b_4090_rate_0.3_4090.json", help="The path to file containing ground truth.")
-    
+
     # parser.add_argument("--pred_path", default="/mnt/data/sby/qwen2.5-vl/Qwen2.5-VL-main/qwen2.5-vl-7b_4090/videomme_6keyframe_qwen2.5-vl-7b_4090_rate_0.2_4090.json", help="The path to file containing prediction.")
     # parser.add_argument("--old_path", default="/mnt/data/sby/qwen2.5-vl/Qwen2.5-VL-main/qwen2.5-vl-7b_4090/intentqa_6keyframe_qwen2.5-vl-7b_4090_rate_0.3_4090.json", help="The path to file containing ground truth.")
     args = parser.parse_args()
     return args
+
+
 # /mnt/data/sby/DYTO-main/llava_7b_4090/nextqa_6keyframe_dyto_llava7b_4090_rate_1_4090.json
+
 
 def map_prediction_to_option(pred):
     pred_option = "none"
@@ -29,7 +40,7 @@ def map_prediction_to_option(pred):
         if prediction_letter in "abcdefABCDEF":
             pred_option = prediction_letter.lower()
         if "answer is " in pred:
-            pred = pred[pred.index("answer is"):]
+            pred = pred[pred.index("answer is") :]
         if "A:" in pred or "A)" in pred:
             pred_option = "a"
         elif "B:" in pred or "B)" in pred:
@@ -66,7 +77,7 @@ def main():
     old_file = open(args.old_path)
     new_pred_contents = [eval(i.strip()) for i in file.readlines()]
     old_pred_contents = [eval(i.strip()) for i in old_file.readlines()]
-    old_pred_contents = old_pred_contents[:len(new_pred_contents)]
+    old_pred_contents = old_pred_contents[: len(new_pred_contents)]
     task_accuracy = {}
     for new_pred_content in tqdm(new_pred_contents):
         task_name = new_pred_content["task_name"]

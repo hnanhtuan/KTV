@@ -18,16 +18,20 @@ def main(args, task_name="MSVD_Zero_Shot_QA"):
             if idx == 0:
                 continue
             _, video_id, answer, question, video_name, question_id, question_type = row
-            data_q.append({
-                "video_name": video_name,
-                "question_id": question_id,
-                "question": question,
-            })
-            data_a.append({
-                "answer": answer,
-                "type": int(question_type),
-                "question_id": question_id,
-            })
+            data_q.append(
+                {
+                    "video_name": video_name,
+                    "question_id": question_id,
+                    "question": question,
+                }
+            )
+            data_a.append(
+                {
+                    "answer": answer,
+                    "type": int(question_type),
+                    "question_id": question_id,
+                }
+            )
 
     folder = f"playground/gt_qa_files/{task_name}"
     os.makedirs(folder, exist_ok=True)

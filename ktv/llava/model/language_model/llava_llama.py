@@ -18,8 +18,13 @@ from typing import List, Optional, Tuple, Union
 import torch
 import torch.nn as nn
 
-from transformers import AutoConfig, AutoModelForCausalLM, \
-                         LlamaConfig, LlamaModel, LlamaForCausalLM
+from transformers import (
+    AutoConfig,
+    AutoModelForCausalLM,
+    LlamaConfig,
+    LlamaModel,
+    LlamaForCausalLM,
+)
 
 from transformers.modeling_outputs import CausalLMOutputWithPast
 from transformers.generation.utils import GenerateOutput
@@ -74,13 +79,13 @@ class LlavaLlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
         attention_mask = kwargs.pop("attention_mask", None)
         keyframe_order = kwargs.pop("keyframe_order", None)
         # print(keyframe_order)
-        num_frames=kwargs.pop("num_frames",None)
+        num_frames = kwargs.pop("num_frames", None)
         # print('num_frames',num_frames)
         prune_mode = kwargs.pop("prune_mode", None)
         global_rate = kwargs.pop("global_rate", None)
         tokens_num = kwargs.pop("tokens_num", None)
 
-        temporal_aggregation = kwargs.pop("temporal_aggregation", None)
+        temporal_aggregation = kwargs.pop("temporal_aggregation", None)  # pyright: ignore[reportUnusedVariable]
         if inputs_embeds is None:
             (
                 input_ids,
@@ -88,7 +93,7 @@ class LlavaLlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
                 attention_mask,
                 past_key_values,
                 inputs_embeds,
-                labels
+                labels,
             ) = self.prepare_inputs_labels_for_multimodal(
                 input_ids,
                 position_ids,
@@ -96,12 +101,13 @@ class LlavaLlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
                 past_key_values,
                 labels,
                 images,
-                image_sizes,temporal_aggregation=kwargs.pop("temporal_aggregation", None),
+                image_sizes,
+                temporal_aggregation=kwargs.pop("temporal_aggregation", None),
                 keyframe_order=keyframe_order,
                 num_frames=num_frames,
                 prune_mode=prune_mode,
                 global_rate=global_rate,
-                tokens_num = tokens_num
+                tokens_num=tokens_num,
             )
 
         return super().forward(
@@ -114,7 +120,7 @@ class LlavaLlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict
+            return_dict=return_dict,
         )
 
     @torch.no_grad()
@@ -129,7 +135,7 @@ class LlavaLlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
         attention_mask = kwargs.pop("attention_mask", None)
         keyframe_order = kwargs.pop("keyframe_order", None)
         # print(keyframe_order)
-        num_frames=kwargs.pop("num_frames",None)
+        num_frames = kwargs.pop("num_frames", None)
         # print('num_frames',num_frames)
         prune_mode = kwargs.pop("prune_mode", None)
         global_rate = kwargs.pop("global_rate", None)
@@ -139,52 +145,52 @@ class LlavaLlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
             raise NotImplementedError("`inputs_embeds` is not supported")
 
         if images is not None:
-            (
-                inputs,
-                position_ids,
-                attention_mask,
-                _,
-                inputs_embeds,
-                _
-            ) = self.prepare_inputs_labels_for_multimodal(
-                inputs,
-                position_ids,
-                attention_mask,
-                None,
-                None,
-                images,
-                image_sizes=image_sizes,
-                temporal_aggregation=kwargs.pop("temporal_aggregation", None),
-                keyframe_order=keyframe_order,
-                num_frames=num_frames,
-                prune_mode=prune_mode,
-                global_rate=global_rate,
-                tokens_num = tokens_num
+            (inputs, position_ids, attention_mask, _, inputs_embeds, _) = (
+                self.prepare_inputs_labels_for_multimodal(
+                    inputs,
+                    position_ids,
+                    attention_mask,
+                    None,
+                    None,
+                    images,
+                    image_sizes=image_sizes,
+                    temporal_aggregation=kwargs.pop("temporal_aggregation", None),
+                    keyframe_order=keyframe_order,
+                    num_frames=num_frames,
+                    prune_mode=prune_mode,
+                    global_rate=global_rate,
+                    tokens_num=tokens_num,
+                )
             )
         else:
             inputs_embeds = self.get_model().embed_tokens(inputs)
-        print('inputs',inputs_embeds.shape)
+        print("inputs", inputs_embeds.shape)
         return super().generate(
             position_ids=position_ids,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
-            **kwargs
+            **kwargs,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, past_key_values=None,
-                                      inputs_embeds=None, **kwargs):
+    def prepare_inputs_for_generation(
+        self, input_ids, past_key_values=None, inputs_embeds=None, **kwargs
+    ):
         images = kwargs.pop("images", None)
         image_sizes = kwargs.pop("image_sizes", None)
         inputs = super().prepare_inputs_for_generation(
-            input_ids, past_key_values=past_key_values, inputs_embeds=inputs_embeds, **kwargs
+            input_ids,
+            past_key_values=past_key_values,
+            inputs_embeds=inputs_embeds,
+            **kwargs,
         )
         # Fix the bug according to "https://github.com/haotian-liu/LLaVA/issues/1448"
         # inputs.pop("cache_position")
         if images is not None:
-            inputs['images'] = images
+            inputs["images"] = images
         if image_sizes is not None:
-            inputs['image_sizes'] = image_sizes
+            inputs["image_sizes"] = image_sizes
         return inputs
+
 
 AutoConfig.register("llava_llama", LlavaConfig)
 AutoModelForCausalLM.register(LlavaConfig, LlavaLlamaForCausalLM)

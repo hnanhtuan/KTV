@@ -6,18 +6,12 @@ from PIL import Image
 import av
 import hydra
 from tqdm import tqdm
-import csv
 import os
 import json
 from hydra.utils import to_absolute_path
 from omegaconf import DictConfig
-from torch.nn.parallel import DataParallel
-from torch.utils.data import Dataset, DataLoader
 import pickle
 import cv2
-import os
-import numpy as np
-import random
 
 device = "cpu"
 model_clip = None
@@ -45,6 +39,7 @@ def load_clip_model(device_name):
         model_clip.to(device)
     print(f"Using CLIP device: {device}")
 
+
 def load_frame(video_path, num_clips=1, num_frms=4):
     # Currently, this function supports only 1 clip
     assert num_clips == 1
@@ -68,42 +63,47 @@ def load_frame(video_path, num_clips=1, num_frms=4):
     original_sizes = tuple(original_sizes)
 
     return clip_imgs, original_sizes
-def get_index( bound, fps, max_frame, first_idx=0):
-        if bound:
-            start, end = bound[0], bound[1]
-        else:
-            start, end = -100000, 100000
-        start_idx = max(first_idx, round(start * fps))
-        end_idx = min(round(end * fps), max_frame)
-        frame_indices = np.arange(start_idx, end_idx + 1)
-        total_frames = len(frame_indices)
-        selected_indices_float = np.linspace(0, total_frames - 1, 50)
-
-        selected_indices_int = np.round(selected_indices_float).astype(int)
 
 
-        selected_frames = frame_indices[selected_indices_int]
-        print(selected_frames)
-        
-        return selected_frames
+def get_index(bound, fps, max_frame, first_idx=0):
+    if bound:
+        start, end = bound[0], bound[1]
+    else:
+        start, end = -100000, 100000
+    start_idx = max(first_idx, round(start * fps))
+    end_idx = min(round(end * fps), max_frame)
+    frame_indices = np.arange(start_idx, end_idx + 1)
+    total_frames = len(frame_indices)
+    selected_indices_float = np.linspace(0, total_frames - 1, 50)
 
-def read_jpg_frame( video_path, keyframe,bound=None, fps=3):
-        print(video_path)
-        frame_indices = keyframe
-        max_frame = len(os.listdir(video_path))
-        frames = list()
-        
-        original_sizes = []
-        for frame_index in frame_indices:
-            frame_index+=1
-            img = Image.open(os.path.join(video_path, f"{frame_index:05d}.jpg"))
-            print(f"{frame_index:05d}.jpg")
-            frames.append(img)
-            original_sizes.append(img.size)
-        
-        return frames,tuple(original_sizes)
+    selected_indices_int = np.round(selected_indices_float).astype(int)
 
-def load_video(video_path, keyframe=None, num_clips=1, num_frms=6, start=None, end=None):
+    selected_frames = frame_indices[selected_indices_int]
+    print(selected_frames)
+
+    return selected_frames
+
+
+def read_jpg_frame(video_path, keyframe, bound=None, fps=3):
+    print(video_path)
+    frame_indices = keyframe
+    max_frame = len(os.listdir(video_path))
+    frames = list()
+
+    original_sizes = []
+    for frame_index in frame_indices:
+        frame_index += 1
+        img = Image.open(os.path.join(video_path, f"{frame_index:05d}.jpg"))
+        print(f"{frame_index:05d}.jpg")
+        frames.append(img)
+        original_sizes.append(img.size)
+
+    return frames, tuple(original_sizes)
+
+
+def load_video(
+    video_path, keyframe=None, num_clips=1, num_frms=6, start=None, end=None
+):
     """
     Load video frames from a video file.
 
@@ -121,8 +121,8 @@ def load_video(video_path, keyframe=None, num_clips=1, num_frms=6, start=None, e
     """
     if os.path.isdir(video_path):
         ts = [start, end]
-        frames,original_sizes = read_jpg_frame(video_path, keyframe,ts)
-        return frames,original_sizes
+        frames, original_sizes = read_jpg_frame(video_path, keyframe, ts)
+        return frames, original_sizes
         # print(frame_idx)
     else:
         cap = cv2.VideoCapture(video_path)
@@ -130,7 +130,7 @@ def load_video(video_path, keyframe=None, num_clips=1, num_frms=6, start=None, e
             raise IOError(f"Cannot open video {video_path}")
 
         total_num_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        print('total_num_frames',total_num_frames)
+        print("total_num_frames", total_num_frames)
         fps = cap.get(cv2.CAP_PROP_FPS)
         duration = total_num_frames / fps
 
@@ -145,7 +145,7 @@ def load_video(video_path, keyframe=None, num_clips=1, num_frms=6, start=None, e
             raise ValueError(f"Invalid start/end seconds: start={start}s, end={end}s")
 
         # Compute frame indices
-        print('keyframe',keyframe)
+        print("keyframe", keyframe)
         if keyframe:
             # frame_idx = sorted([k[0] for k in keyframe if clip_start <= k[0] < clip_end])
             # frame_idx = sorted([k for k in keyframe if clip_start <= k < clip_end])
@@ -155,7 +155,7 @@ def load_video(video_path, keyframe=None, num_clips=1, num_frms=6, start=None, e
             m = min(num_frms, n)
             interval = n / m
             frame_idx = [int(clip_start + i * interval) for i in range(m)]
-    print('frame_idx',frame_idx)
+    print("frame_idx", frame_idx)
     clip_imgs = []
     original_sizes = []
 
@@ -171,11 +171,11 @@ def load_video(video_path, keyframe=None, num_clips=1, num_frms=6, start=None, e
             clip_imgs.append(img)
             original_sizes.append(img.size)
         except Exception as e:
-            print('video_path', video_path, '\n', 'idx', idx, '\n', e)
+            print("video_path", video_path, "\n", "idx", idx, "\n", e)
 
     cap.release()
     original_sizes = tuple(original_sizes)
-    print('len',len(clip_imgs))
+    print("len", len(clip_imgs))
     return clip_imgs, original_sizes
 
 
@@ -200,16 +200,11 @@ def get_seq_frames(total_num_frames, desired_num_frames):
     return seq
 
 
-
-
-
-
-
 def extract_selected_frames(video_path, indices):
     extracted_frames_pil = []
     indices_set = set(indices)
     max_needed_index = -1
-    if indices_set: 
+    if indices_set:
         max_needed_index = max(indices_set)
 
     try:
@@ -223,47 +218,47 @@ def extract_selected_frames(video_path, indices):
                 frames_found_count = 0
             for frame in container.decode(stream):
                 if frame_idx_counter in indices_set:
-                    pil_image = frame.to_image() 
+                    pil_image = frame.to_image()
                     extracted_frames_pil.append(pil_image)
                     frames_found_count += 1
-            
+
                 if frames_found_count == len(indices_set):
-                    break 
+                    break
 
                 if max_needed_index != -1 and frame_idx_counter >= max_needed_index:
                     break
-                
+
                 frame_idx_counter += 1
-            
+
             if frames_found_count < len(indices_set):
-                actual_video_frames = frame_idx_counter 
-
-
+                actual_video_frames = frame_idx_counter
 
     except FileNotFoundError:
         return []
-    except av.AVError as e:
-
+    except av.AVError:
         return []
-    except Exception as e: 
-
+    except Exception:
         return []
-            
+
     return extracted_frames_pil
 
-def video_frame_clustering(frame_features: np.ndarray, num_cluster: int=5):
-    
+
+def video_frame_clustering(frame_features: np.ndarray, num_cluster: int = 5):
     """Cluster video frames using K-means and return the indices of the cluster centers."""
-    kmeans = KMeans(n_clusters=num_cluster, random_state=0, init='k-means++', n_init=10).fit(frame_features)
+    kmeans = KMeans(
+        n_clusters=num_cluster, random_state=0, init="k-means++", n_init=10
+    ).fit(frame_features)
     labels = kmeans.labels_
     cluster_centers = kmeans.cluster_centers_
-    distances = np.linalg.norm(frame_features - cluster_centers[:, np.newaxis, :], axis=2)
+    distances = np.linalg.norm(
+        frame_features - cluster_centers[:, np.newaxis, :], axis=2
+    )
     closest_frames = np.argmin(distances, axis=1)
     clusters = [[] for _ in range(num_cluster)]
-    cluster_center_indices = [[] for _ in range(num_cluster)] 
+    cluster_center_indices = [[] for _ in range(num_cluster)]
     for j, label in enumerate(labels):
         clusters[label].append(j)
-    for j in range (num_cluster):
+    for j in range(num_cluster):
         cluster_center_indices[j] = closest_frames[j]
     for j in range(len(cluster_center_indices)):
         cluster_center_indices[j] = int(cluster_center_indices[j])
@@ -272,11 +267,11 @@ def video_frame_clustering(frame_features: np.ndarray, num_cluster: int=5):
 
 def get_original_frame_number(
     total_original_frames: int,
-    index_in_extracted_list: int,  
-    ts: list = None, 
-    fps: int = None,  
-    max_frames_to_extract: int = 5400
-) -> int:  
+    index_in_extracted_list: int,
+    ts: list = None,
+    fps: int = None,
+    max_frames_to_extract: int = 5400,
+) -> int:
     print(total_original_frames)
 
     num_actually_extracted: int
@@ -293,31 +288,30 @@ def get_original_frame_number(
     original_frame_index_0_based: int
 
     if total_original_frames <= max_frames_to_extract:
-
         if ts:
-            original_frame_index_0_based = int(ts[0]*fps)+ index_in_extracted_list
+            original_frame_index_0_based = int(ts[0] * fps) + index_in_extracted_list
         else:
-            original_frame_index_0_based =  index_in_extracted_list
+            original_frame_index_0_based = index_in_extracted_list
     else:
-
         if num_actually_extracted == 1:
-
             if index_in_extracted_list == 0:
                 original_frame_index_0_based = 0
             else:
- 
-                raise ValueError("If only one frame is extracted, index_in_extracted_list must be 0.")
+                raise ValueError(
+                    "If only one frame is extracted, index_in_extracted_list must be 0."
+                )
         else:
-
             # original_frame_index_0_based = round(
             #     index_in_extracted_list * (total_original_frames - 1) / (num_actually_extracted - 1)
             # )
-            # original_frame_index_0_based = int(original_frame_index_0_based) 
-            changed_list = np.linspace(0, total_original_frames - 1, max_frames_to_extract, dtype=int)
+            # original_frame_index_0_based = int(original_frame_index_0_based)
+            changed_list = np.linspace(
+                0, total_original_frames - 1, max_frames_to_extract, dtype=int
+            )
             # print(index_in_extracted_list)
             original_frame_index_0_based = changed_list[index_in_extracted_list]
             # print(original_frame_index_0_based)
-      
+
     return original_frame_index_0_based
 
 
@@ -326,13 +320,13 @@ def load_video_frame_tensor(video_frame_tensor_path):
     if os.path.isdir(video_frame_tensor_path):
         video_frame_tensor = {}
         for filename in sorted(os.listdir(video_frame_tensor_path)):
-            if not filename.endswith('.pkl'):
+            if not filename.endswith(".pkl"):
                 continue
-            with open(os.path.join(video_frame_tensor_path, filename), 'rb') as f:
+            with open(os.path.join(video_frame_tensor_path, filename), "rb") as f:
                 video_frame_tensor.update(pickle.load(f))
         return video_frame_tensor
 
-    with open(video_frame_tensor_path, 'rb') as f:
+    with open(video_frame_tensor_path, "rb") as f:
         return dict(pickle.load(f))
 
 
@@ -356,7 +350,14 @@ def get_tensor_for_video(video_frame_tensor, video_name):
     return None
 
 
-def cluster(json_path, video_path, video_frame_tensor_path, save_cluster_path, dataset, combined_output_path=None):
+def cluster(
+    json_path,
+    video_path,
+    video_frame_tensor_path,
+    save_cluster_path,
+    dataset,
+    combined_output_path=None,
+):
     """Select question-aware keyframes and save their ranked order per question."""
     # This function first uses precomputed DINOv2 frame features to find diverse
     # candidate frames, then uses CLIP to rank those candidates against the question.
@@ -371,7 +372,7 @@ def cluster(json_path, video_path, video_frame_tensor_path, save_cluster_path, d
     video_frame_tensor = load_video_frame_tensor(video_frame_tensor_path)
 
     # Load the QA metadata. Each item tells us which video and question to process.
-    with open(json_path, 'r') as f:
+    with open(json_path, "r") as f:
         qa_data = json.load(f)
 
     combined_results = {}
@@ -379,14 +380,14 @@ def cluster(json_path, video_path, video_frame_tensor_path, save_cluster_path, d
     for sample in tqdm(qa_data, total=len(qa_data)):
         # Pull the fields needed to locate the video, rank frames for the question,
         # and name the per-question output JSON.
-        video_name = sample['video_name']
-        prompt = sample['question']
-        question_id = sample['question_id']
+        video_name = sample["video_name"]
+        prompt = sample["question"]
+        question_id = sample["question_id"]
 
         # Skip samples that were already processed in a previous run.
-        output_path = os.path.join(save_cluster_path, f'{question_id}.json')
+        output_path = os.path.join(save_cluster_path, f"{question_id}.json")
         if os.path.exists(output_path):
-            with open(output_path, 'r', encoding='utf-8') as f:
+            with open(output_path, "r", encoding="utf-8") as f:
                 combined_results.update(json.load(f))
             continue
 
@@ -403,14 +404,16 @@ def cluster(json_path, video_path, video_frame_tensor_path, save_cluster_path, d
         tensor = get_tensor_for_video(video_frame_tensor, video_name)
         if tensor is None:
             missing_tensor_count += 1
-            print(f"missing_feature_tensor question_id={question_id} video_name={video_name}")
+            print(
+                f"missing_feature_tensor question_id={question_id} video_name={video_name}"
+            )
             continue
 
         # KMeans selects diverse candidate frames by finding the frame nearest to
         # each cluster center in DINOv2 feature space.
         print(len(tensor))
         clustered_indices = video_frame_clustering(tensor, num_keyframes)
-        print('cluster_frame_temp', clustered_indices)
+        print("cluster_frame_temp", clustered_indices)
 
         # DINO features may have been extracted from at most max_frames_to_extract
         # sampled frames. Convert those sampled-list indices back to original frame IDs.
@@ -429,10 +432,12 @@ def cluster(json_path, video_path, video_frame_tensor_path, save_cluster_path, d
         if len(set(candidate_frame_indices)) != num_keyframes:
             candidate_frame_indices = [
                 int(index)
-                for index in np.linspace(0, float(total_frames), num_keyframes, endpoint=False)
+                for index in np.linspace(
+                    0, float(total_frames), num_keyframes, endpoint=False
+                )
             ]
 
-        print('candidate_frame_indices', candidate_frame_indices)
+        print("candidate_frame_indices", candidate_frame_indices)
         # Load the actual image frames for the candidate original frame indices.
         frames_cluster, _ = load_video(
             full_video_path,
@@ -446,16 +451,16 @@ def cluster(json_path, video_path, video_frame_tensor_path, save_cluster_path, d
 
         # CLIP has a limited text context. For long questions, keep a middle slice
         # that likely contains the most useful content words.
-        prompt_words = prompt.split(' ')
-        print('prompt_len', len(prompt_words))
+        prompt_words = prompt.split(" ")
+        print("prompt_len", len(prompt_words))
         if len(prompt_words) > 40:
-            prompt = ' '.join(prompt_words[10:50])
+            prompt = " ".join(prompt_words[10:50])
 
         # Encode candidate frames and the question with CLIP, normalize both feature
         # sets, then compute image-text similarity scores.
         image_input = torch.stack(image_batch).to(device)
         with torch.no_grad():
-            print('question', prompt)
+            print("question", prompt)
             image_features = model_clip.encode_image(image_input)
             text_input = clip.tokenize([prompt]).to(device)
             text_features = model_clip.encode_text(text_input)
@@ -471,23 +476,19 @@ def cluster(json_path, video_path, video_frame_tensor_path, save_cluster_path, d
         print(top_k_indices)
 
         # Convert ranked candidate positions back to original video frame numbers.
-        top_keyframes = [
-            candidate_frame_indices[int(index)]
-            for index in top_k_indices
-        ]
+        top_keyframes = [candidate_frame_indices[int(index)] for index in top_k_indices]
 
         # Store each selected frame with its rank. In inference, this order is used
         # to allocate more visual tokens to more question-relevant keyframes.
         key_frame_order = [
-            [frame_index, rank]
-            for rank, frame_index in enumerate(top_keyframes)
+            [frame_index, rank] for rank, frame_index in enumerate(top_keyframes)
         ]
 
         # Save one JSON file per question: {question_id: [[frame_index, rank], ...]}.
         result = {question_id: key_frame_order}
         combined_results.update(result)
         print(result)
-        with open(output_path, 'w', encoding='utf-8') as f:
+        with open(output_path, "w", encoding="utf-8") as f:
             json.dump(
                 result,
                 f,
@@ -500,7 +501,7 @@ def cluster(json_path, video_path, video_frame_tensor_path, save_cluster_path, d
         combined_output_dir = os.path.dirname(combined_output_path)
         if combined_output_dir:
             os.makedirs(combined_output_dir, exist_ok=True)
-        with open(combined_output_path, 'w', encoding='utf-8') as f:
+        with open(combined_output_path, "w", encoding="utf-8") as f:
             json.dump(
                 combined_results,
                 f,
@@ -508,7 +509,9 @@ def cluster(json_path, video_path, video_frame_tensor_path, save_cluster_path, d
                 indent=4,
                 default=lambda o: int(o) if isinstance(o, np.integer) else o,
             )
-    print(f"Finished clustering. skipped_missing_tensor={missing_tensor_count} total_questions={len(qa_data)}")
+    print(
+        f"Finished clustering. skipped_missing_tensor={missing_tensor_count} total_questions={len(qa_data)}"
+    )
 
 
 def resolve_path(path):
@@ -521,7 +524,9 @@ def resolve_path(path):
     return to_absolute_path(path)
 
 
-@hydra.main(config_path="configs/keyframe_cluster", config_name="config", version_base=None)
+@hydra.main(
+    config_path="configs/keyframe_cluster", config_name="config", version_base=None
+)
 def main(cfg: DictConfig):
     load_clip_model(cfg.device)
     cluster(

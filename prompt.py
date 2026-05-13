@@ -2,8 +2,12 @@
 # For licensing see accompanying LICENSE file.
 # Copyright (C) 2024 Apple Inc. All Rights Reserved.
 #
-from ktv.llava.constants import IMAGE_TOKEN_INDEX, DEFAULT_IMAGE_TOKEN, DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN
-from ktv.llava.conversation import conv_templates, SeparatorStyle
+from ktv.llava.constants import (
+    DEFAULT_IMAGE_TOKEN,
+    DEFAULT_IM_START_TOKEN,
+    DEFAULT_IM_END_TOKEN,
+)
+from ktv.llava.conversation import conv_templates
 
 
 def get_option_prompt(candidates, version="default"):
@@ -43,7 +47,13 @@ def get_prompt(model, conv_mode, question):
         prompt = prompt % question
     else:
         if model.config.mm_use_im_start_end:
-            ques = DEFAULT_IM_START_TOKEN + DEFAULT_IMAGE_TOKEN + DEFAULT_IM_END_TOKEN + "\n" + question
+            ques = (
+                DEFAULT_IM_START_TOKEN
+                + DEFAULT_IMAGE_TOKEN
+                + DEFAULT_IM_END_TOKEN
+                + "\n"
+                + question
+            )
         else:
             ques = DEFAULT_IMAGE_TOKEN + "\n" + question
         conv = conv_templates[conv_mode].copy()

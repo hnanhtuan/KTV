@@ -16,18 +16,38 @@ def main(args, task_name="NExTQA"):
         for idx, row in enumerate(spamreader):
             if idx == 0:
                 continue
-            _, video_name, _, _, _, question, answer_number, question_id, _, a0, a1, a2, a3, a4, answer = row
+            (
+                _,
+                video_name,
+                _,
+                _,
+                _,
+                question,
+                answer_number,
+                question_id,
+                _,
+                a0,
+                a1,
+                a2,
+                a3,
+                a4,
+                answer,
+            ) = row
             candidates = [a0, a1, a2, a3, a4]
-            assert answer in candidates and int(answer_number) == candidates.index(answer)
-            data_list_info.append({
-                "task_name": task_name,
-                "video_name": f"{video_name}.mp4",
-                "question_id": question_id,
-                "question": question,
-                "answer_number": int(answer_number),
-                "candidates": candidates,
-                "answer": answer,
-            })
+            assert answer in candidates and int(answer_number) == candidates.index(
+                answer
+            )
+            data_list_info.append(
+                {
+                    "task_name": task_name,
+                    "video_name": f"{video_name}.mp4",
+                    "question_id": question_id,
+                    "question": question,
+                    "answer_number": int(answer_number),
+                    "candidates": candidates,
+                    "answer": answer,
+                }
+            )
 
     folder = f"playground/gt_qa_files/{task_name}"
     os.makedirs(folder, exist_ok=True)

@@ -21,12 +21,14 @@ def prepare_consistency(qa_file):
                 _, video_name1, question1, question_id1, answer1, question_type1 = row1
                 _, video_name2, question2, question_id2, answer2, question_type2 = row2
                 assert question_id1 == question_id2
-                data_qa.append({
-                    "video_name": video_name1[2:],
-                    "question_id": question_id1,
-                    "question": [question1, question2],
-                    "answer": answer1,
-                })
+                data_qa.append(
+                    {
+                        "video_name": video_name1[2:],
+                        "question_id": question_id1,
+                        "question": [question1, question2],
+                        "answer": answer1,
+                    }
+                )
     return data_qa
 
 
@@ -39,12 +41,14 @@ def prepare_others(qa_file):
             if idx == 0:
                 continue
             _, video_name, question, question_id, answer, question_type = row
-            data_qa.append({
-                "video_name": video_name[2:],
-                "question_id": question_id,
-                "question": question,
-                "answer": answer,
-            })
+            data_qa.append(
+                {
+                    "video_name": video_name[2:],
+                    "question_id": question_id,
+                    "question": question,
+                    "answer": answer,
+                }
+            )
     return data_qa
 
 
@@ -71,7 +75,9 @@ def parse_args():
     Parse command-line arguments.
     """
     parser = argparse.ArgumentParser()
-    parser.add_argument("--qa_folder", help="Path to text_generation_benchmark folder", required=True)
+    parser.add_argument(
+        "--qa_folder", help="Path to text_generation_benchmark folder", required=True
+    )
     return parser.parse_args()
 
 

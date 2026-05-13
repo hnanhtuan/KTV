@@ -11,7 +11,9 @@ def configure_hf_cache():
         hf_home = DEFAULT_HF_HOME
         os.environ["HF_HOME"] = hf_home
 
-    hub_cache = os.environ.get("HF_HUB_CACHE") or os.environ.get("HUGGINGFACE_HUB_CACHE")
+    hub_cache = os.environ.get("HF_HUB_CACHE") or os.environ.get(
+        "HUGGINGFACE_HUB_CACHE"
+    )
     if not hub_cache or hub_cache.startswith(f"{STALE_HF_HOME}/"):
         hub_cache = os.path.join(hf_home, "hub")
         os.environ["HF_HUB_CACHE"] = hub_cache
@@ -24,7 +26,6 @@ def configure_hf_cache():
 
 configure_hf_cache()
 
-import csv
 import cv2
 import av
 import pickle
@@ -33,19 +34,20 @@ import numpy as np
 from PIL import Image
 import hydra
 from tqdm import tqdm
-from decord import VideoReader, cpu,gpu
 from transformers import Dinov2Model, AutoImageProcessor
-from sklearn.cluster import KMeans
 import json
 from hydra.utils import to_absolute_path
 from omegaconf import DictConfig
 from torchvision import transforms
-fast_transform = transforms.Compose([
-    transforms.Resize(256, interpolation=transforms.InterpolationMode.BICUBIC),
-    transforms.CenterCrop(224),
-    transforms.ToTensor(),
-    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-])
+
+fast_transform = transforms.Compose(
+    [
+        transforms.Resize(256, interpolation=transforms.InterpolationMode.BICUBIC),
+        transforms.CenterCrop(224),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ]
+)
 
 # model_name = "dinov2_vitl14"
 # model = torch.hub.load('facebookresearch/dinov2', model_name)
@@ -91,31 +93,36 @@ def get_frame_indices(total_frames, max_frames):
     else:
         return np.linspace(0, total_frames - 1, max_frames, dtype=int)
 
-def get_index( bound, fps, max_frame, first_idx=0):
-        """Convert an optional time range into frame indices for JPG frame folders."""
-        if bound:
-            start, end = bound[0], bound[1]
-        else:
-            start, end = -100000, 100000
-        start_idx = max(first_idx, round(start * fps))
-        end_idx = min(round(end * fps), max_frame)
-        frame_indices = np.arange(start_idx, end_idx + 1)
 
-        return frame_indices
-    
-def read_jpg_frame( video_path, bound=None, fps=3):
-        """Load JPG frames from a frame folder for an optional time range."""
-        print(video_path)
-        max_frame = len(os.listdir(video_path))
-        frames = list()
-        frame_indices = get_index(bound, fps, max_frame, first_idx=1) # frame_idx starts from 1
-        print(frame_indices)
-        for frame_index in frame_indices:
-            img = Image.open(os.path.join(video_path, f"{frame_index:05d}.jpg"))
-            frames.append(img)
+def get_index(bound, fps, max_frame, first_idx=0):
+    """Convert an optional time range into frame indices for JPG frame folders."""
+    if bound:
+        start, end = bound[0], bound[1]
+    else:
+        start, end = -100000, 100000
+    start_idx = max(first_idx, round(start * fps))
+    end_idx = min(round(end * fps), max_frame)
+    frame_indices = np.arange(start_idx, end_idx + 1)
 
-        return frames
-    
+    return frame_indices
+
+
+def read_jpg_frame(video_path, bound=None, fps=3):
+    """Load JPG frames from a frame folder for an optional time range."""
+    print(video_path)
+    max_frame = len(os.listdir(video_path))
+    frames = list()
+    frame_indices = get_index(
+        bound, fps, max_frame, first_idx=1
+    )  # frame_idx starts from 1
+    print(frame_indices)
+    for frame_index in frame_indices:
+        img = Image.open(os.path.join(video_path, f"{frame_index:05d}.jpg"))
+        frames.append(img)
+
+    return frames
+
+
 # def extract_selected_frames(video_path, indices):
 #     """Read selected video frames sequentially with OpenCV."""
 #     cap = cv2.VideoCapture(video_path)
@@ -199,7 +206,7 @@ def dino_feature_stream(video_path, model, device, indices, batch_size=128):
     with torch.no_grad():
         for frame in container.decode(stream):
             if current_idx in indices_set:
-                img = frame.to_ndarray(format='rgb24')
+                img = frame.to_ndarray(format="rgb24")
                 img = Image.fromarray(img)
                 frames.append(fast_transform(img))
                 # Extract features and clean up once the batch is full.
@@ -208,7 +215,7 @@ def dino_feature_stream(video_path, model, device, indices, batch_size=128):
                     outputs = model(pixel_values=batch_tensors)
                     batch_features = outputs.pooler_output.cpu().numpy()
                     features.extend(batch_features)
-                    print('process done')
+                    print("process done")
                     # Clear the cache.
                     del batch_tensors, frames[:]
                     # torch.cuda.empty_cache()
@@ -283,10 +290,13 @@ def dino_feature_stream(video_path, model, device, indices, batch_size=128):
 
 #     return features
 
-def dino_feature_optimized(video_path, data_type=None, ts=None,batch_size=256, target_frames=5400):
+
+def dino_feature_optimized(
+    video_path, data_type=None, ts=None, batch_size=256, target_frames=5400
+):
     """Select frames from a video and run the streaming DINOv2 feature extractor."""
-    if data_type=='frame':
-        print('frame')
+    if data_type == "frame":
+        print("frame")
         frames = read_jpg_frame(video_path, ts)
     else:
         # print(video_path)
@@ -295,7 +305,7 @@ def dino_feature_optimized(video_path, data_type=None, ts=None,batch_size=256, t
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         cap = cv2.VideoCapture(video_path)
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        print("total frames",total_frames)
+        print("total frames", total_frames)
         cap.release()
 
         if total_frames <= 0:
@@ -313,7 +323,7 @@ def dino_feature_optimized(video_path, data_type=None, ts=None,batch_size=256, t
     #     batch = frames[i:i + batch_size]
     #     # inputs = hf_processor(images=batch, return_tensors="pt").to(device)
     #     inputs = torch.stack([fast_transform(img) for img in batch])
-    #     batch_tensors = inputs.to(device, non_blocking=True)  
+    #     batch_tensors = inputs.to(device, non_blocking=True)
     #     print('process done')
     #     with torch.no_grad():
     #         outputs = model(pixel_values=batch_tensors)   # <-- Note: use a keyword argument.
@@ -329,22 +339,22 @@ def dino_feature_optimized(video_path, data_type=None, ts=None,batch_size=256, t
 
 def dinov2(json_path, video_path, save_tensor_path, dataset):
     """Extract and save DINOv2 frame features for each video listed in a QA JSON file."""
-    
+
     if not os.path.exists(save_tensor_path):
         os.makedirs(save_tensor_path)
     # video_total = set()
     video_total = []
     procesed_videos = set()
-    with open(json_path ,'r')as f:
+    with open(json_path, "r") as f:
         data = json.load(f)
     for i in data:
-        video_total.append(i['question_id'])
+        video_total.append(i["question_id"])
     # data = data[250:]
     for video in tqdm(data, total=len(video_total)):
-        if dataset=='MLVU_Test':
-            video_name = video['video']
+        if dataset == "MLVU_Test":
+            video_name = video["video"]
         else:
-            video_name = video['video_name']
+            video_name = video["video_name"]
         # if video_name=='test_TFS-5.mp4' or video_name=='test_BWB-5.mp4'or video_name=='test_movie101_91.mp4' or video_name=='test_AWD-3.mp4':
         #     continue
         # full_video_path = video['video_path']
@@ -360,9 +370,9 @@ def dinov2(json_path, video_path, save_tensor_path, dataset):
         #     full_video_path = os.path.join(video_path, video_name)
         full_video_path = os.path.join(video_path, video_name)
         if not os.path.exists(full_video_path):
-            print('path not exist',full_video_path)
-        video_name = video_name.replace('.mp4','')
-        output_path = os.path.join(save_tensor_path, f'{video_name}.pkl')
+            print("path not exist", full_video_path)
+        video_name = video_name.replace(".mp4", "")
+        output_path = os.path.join(save_tensor_path, f"{video_name}.pkl")
         # print(save_tensor_path)
         # print(output_path)
         # print(output_path)
@@ -380,11 +390,12 @@ def dinov2(json_path, video_path, save_tensor_path, dataset):
         # else:
         #     ts = None
         # frame_features = dino_feature_optimized(full_video_path, data_type, ts,batch_size=2000)
-        frame_features = dino_feature_optimized(full_video_path,batch_size=1000)
+        frame_features = dino_feature_optimized(full_video_path, batch_size=1000)
         if frame_features:
             temp = {video_name: frame_features}
-            with open(output_path, 'wb') as f:
+            with open(output_path, "wb") as f:
                 pickle.dump(temp, f)
+
 
 def resolve_path(path):
     """Resolve local Hydra config paths relative to the original launch directory."""
@@ -396,7 +407,9 @@ def resolve_path(path):
     return to_absolute_path(path)
 
 
-@hydra.main(config_path="configs/keyframe_select", config_name="config", version_base=None)
+@hydra.main(
+    config_path="configs/keyframe_select", config_name="config", version_base=None
+)
 def main(cfg: DictConfig):
     load_dino_model(cfg.device)
     dinov2(

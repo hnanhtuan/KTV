@@ -7,6 +7,8 @@ import argparse
 import csv
 import json
 import re
+
+
 def main(args, task_name="Videomme"):
     data_list_info = []
     with open(args.qa_file, newline="") as csvfile:
@@ -16,11 +18,23 @@ def main(args, task_name="Videomme"):
             if idx == 0:
                 continue
             # _, video_name, question, question_id, answer, video_id, _, a0, a1, a2, a3, a4 = row
-            _, deration, domain, sub_category, url, video_name, question_id, task_type, question, options, answer= row
+            (
+                _,
+                deration,
+                domain,
+                sub_category,
+                url,
+                video_name,
+                question_id,
+                task_type,
+                question,
+                options,
+                answer,
+            ) = row
             candidates = options
             cleaned = options.strip("[]'")
-            cleaned = cleaned.replace('\n','')
-            cleaned = cleaned.replace('\'','')
+            cleaned = cleaned.replace("\n", "")
+            cleaned = cleaned.replace("'", "")
             # print(cleaned)
             # exit(0)
             # print(cleaned)
@@ -31,25 +45,27 @@ def main(args, task_name="Videomme"):
             # print(candidates)
             # print(answer)
             # exit(0)
-            if answer =='A':
+            if answer == "A":
                 answer = candidates[0]
-            elif answer =='B':
+            elif answer == "B":
                 answer = candidates[1]
-            elif answer == 'C':
+            elif answer == "C":
                 answer = candidates[2]
-            elif answer == 'D':
+            elif answer == "D":
                 answer = candidates[3]
             assert answer in candidates
-        
-            data_list_info.append({
-                "task_name": task_name,
-                "video_name": f"{video_name}.mp4",
-                "question_id": question_id,
-                "question": question,
-                "answer_number": candidates.index(answer),
-                "candidates": candidates,
-                "answer": answer,
-            })
+
+            data_list_info.append(
+                {
+                    "task_name": task_name,
+                    "video_name": f"{video_name}.mp4",
+                    "question_id": question_id,
+                    "question": question,
+                    "answer_number": candidates.index(answer),
+                    "candidates": candidates,
+                    "answer": answer,
+                }
+            )
 
     folder = args.output_dir
     os.makedirs(folder, exist_ok=True)

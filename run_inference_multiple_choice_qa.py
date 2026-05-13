@@ -6,20 +6,26 @@ import os
 import sys
 from pathlib import Path
 from typing import Any, Optional, Sequence, Tuple, Union
+
 # sys.path.insert(0, Path(__file__).parent.as_posix())
 sys.path.insert(0, os.path.join(Path(__file__).parent.as_posix(), "ktv"))
 import json
 import hydra
 from PIL import Image
 from tqdm import tqdm
-import torch       #for cuda device
+import torch  # for cuda device
+
 # import torch_npu  for npu device
 from hydra.utils import to_absolute_path
 from omegaconf import DictConfig
 from ktv.llava.constants import IMAGE_TOKEN_INDEX
 from ktv.llava.model.builder import load_pretrained_model
 from ktv.llava.utils import disable_torch_init
-from ktv.llava.mm_utils import tokenizer_image_token, process_images, get_model_name_from_path
+from ktv.llava.mm_utils import (
+    tokenizer_image_token,
+    process_images,
+    get_model_name_from_path,
+)
 
 from dataset import load_video
 from prompt import get_multiple_choice_prompt
@@ -61,12 +67,16 @@ def llava_inference(
     prompt = get_multiple_choice_prompt(model, conv_mode, question, candidates)
     # print(prompt)
     # Get text inputs
-    input_ids = tokenizer_image_token(
-        prompt,
-        tokenizer,
-        IMAGE_TOKEN_INDEX,
-        return_tensors="pt",
-    ).unsqueeze(0).to(device)
+    input_ids = (
+        tokenizer_image_token(
+            prompt,
+            tokenizer,
+            IMAGE_TOKEN_INDEX,
+            return_tensors="pt",
+        )
+        .unsqueeze(0)
+        .to(device)
+    )
 
     # Get image inputs
     image_tensor = process_images(video_frames, image_processor, model.config)
@@ -74,7 +84,9 @@ def llava_inference(
     with torch.inference_mode():
         output_ids = model.generate(
             input_ids,
-            images=image_tensor.to(dtype=dtype, device=device, non_blocking=(device == "cuda")),
+            images=image_tensor.to(
+                dtype=dtype, device=device, non_blocking=(device == "cuda")
+            ),
             image_sizes=image_sizes,
             do_sample=True if temperature > 0 else False,
             temperature=temperature,
@@ -83,11 +95,11 @@ def llava_inference(
             max_new_tokens=128,
             use_cache=True,
             temporal_aggregation=temporal_aggregation,
-            keyframe_order = keyframe_order,
+            keyframe_order=keyframe_order,
             num_frames=num_frames,
-            prune_mode = prune_mode,
-            global_rate = global_rate,
-            tokens_num = tokens_num
+            prune_mode=prune_mode,
+            global_rate=global_rate,
+            tokens_num=tokens_num,
         )
 
     outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)[0].strip()
@@ -122,7 +134,9 @@ def run_inference(args):
     model_path = os.path.expanduser(args.model_path)
     model_name = get_model_name_from_path(model_path)
     tokenizer, model, image_processor, context_len = load_pretrained_model(
-        model_path, args.model_base, model_name,
+        model_path,
+        args.model_base,
+        model_name,
         device=device,
         device_map=device_map,
         rope_scaling_factor=args.rope_scaling_factor,
@@ -132,7 +146,7 @@ def run_inference(args):
     # {question_id: [[frame_index, rank], ...]}.
     keyframes_by_question = {}
     if key_frame_path:
-        with open(key_frame_path, 'r') as f:
+        with open(key_frame_path, "r") as f:
             keyframes_by_question = json.load(f)
 
     # Override image aspect ratio when the experiment config requests it.
@@ -150,10 +164,10 @@ def run_inference(args):
     output_path = os.path.join(output_dir, f"{args.output_name}.json")
     generated_ids = set()
     if os.path.exists(output_path):
-        with open(output_path, 'r') as f:
+        with open(output_path, "r") as f:
             for line in f:
                 data = json.loads(line)
-                generated_ids.add(data['id'])
+                generated_ids.add(data["id"])
     output_mode = "a" if os.path.exists(output_path) else "w"
 
     with open(output_path, output_mode) as ans_file:
@@ -187,15 +201,16 @@ def run_inference(args):
             if keyframe:
                 frame_to_rank = {frame_index: rank for frame_index, rank in keyframe}
                 keyframe_order = [
-                    frame_to_rank[frame_index]
-                    for frame_index in sorted(frame_to_rank)
+                    frame_to_rank[frame_index] for frame_index in sorted(frame_to_rank)
                 ]
             else:
                 keyframe = None
                 keyframe_order = None
 
             # Load either the selected keyframes or uniformly sampled video frames.
-            video_frames, sizes = load_video(video_path, keyframe, num_frms=args.num_frames)
+            video_frames, sizes = load_video(
+                video_path, keyframe, num_frms=args.num_frames
+            )
 
             # Run one multiple-choice inference request and normalize image wording
             # in the generated answer back to video wording.
@@ -215,10 +230,10 @@ def run_inference(args):
                 keyframe_order,
                 args.num_frames,
                 args.prune_mode,
-                global_rate = args.rate,
-                tokens_num = args.tokens_num,
-                device = device,
-                dtype = dtype,
+                global_rate=args.rate,
+                tokens_num=args.tokens_num,
+                device=device,
+                dtype=dtype,
             )
             output = output.replace("In the image", "In the video")
             print(output)
