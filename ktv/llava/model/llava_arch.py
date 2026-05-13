@@ -160,32 +160,49 @@ class LlavaMetaForCausalLM(ABC):
         rate=None,
         tokens_num=None,
     ):
-        pruned_modes = {"cls_new_token_sim", "uniform_token"}
-        if prune_mode not in pruned_modes:
-            if prune_mode is not None:
-                raise ValueError(f"Unsupported prune_mode: {prune_mode}")
+        """
+        Encode image/video frame patches and optionally prune patch tokens.
 
-            image_features = self.get_model().get_vision_tower()(images, prune_mode)
-            image_features = image_features[:, 1:]
-            image_features = self.get_model().mm_projector(image_features)
+        Inputs:
+        - images: pixel tensor consumed by the vision tower.
+        - prune_mode: None for no token pruning, or one of
+          {"cls_new_token_sim", "uniform_token"} for score-based pruning.
+        - keyframe_order/num_frames/tokens_num/rate: pruning controls.
+
+        Returns:
+        - Encoded (projected) patch features. Shape follows existing behavior:
+          - no pruning: [B, N, D] (or [1, T*N, D] for frame inputs)
+          - pruning:    [1, K_total, D]
+        """
+        model = self.get_model()
+        vision_tower = model.get_vision_tower()
+        projector = model.mm_projector
+
+        supported_pruned_modes = {"cls_new_token_sim", "uniform_token"}
+        if prune_mode is not None and prune_mode not in supported_pruned_modes:
+            raise ValueError(f"Unsupported prune_mode: {prune_mode}")
+
+        # Fast path: no pruning, simply drop CLS token then project.
+        if prune_mode is None:
+            image_features = vision_tower(images, prune_mode)  # [B, N+1, C]
+            image_features = image_features[:, 1:]  # remove CLS -> [B, N, C]
+            image_features = projector(image_features)  # -> [B, N, D]
             if num_frames is not None:
+                # Keep legacy frame layout used by current downstream code.
                 image_features = image_features.flatten(0, 1).unsqueeze(0)
             return image_features
 
-        image_features, cls_att = self.get_model().get_vision_tower()(
-            images, prune_mode
-        )
-        # cls_features = image_features[:, 0]
-        # [frames, token_num(576), dimension]
-        temp_features = []
-        for i in range(len(image_features)):
-            # remain_tokens_num= 0
-            image_feature = image_features[i][1:]
-            # print(keyframe_order)
+        # Pruning path: vision tower also returns CLS-to-token importance scores.
+        image_features, cls_att = vision_tower(images, prune_mode)
+        selected_projected_features = []
+
+        for frame_idx in range(len(image_features)):
+            # Remove CLS token and keep only patch tokens for this frame.
+            frame_patch_features = image_features[frame_idx][1:]
+
+            # Decide how many tokens to keep for this frame.
             if keyframe_order:
-                # print(tokens_num)
-                order = keyframe_order[i]
-                # print('order',order)
+                order = keyframe_order[frame_idx]
                 if num_frames == 6:
                     if order == 0:
                         remain_tokens_num = 288
@@ -193,6 +210,8 @@ class LlavaMetaForCausalLM(ABC):
                         remain_tokens_num = 144
                     else:
                         remain_tokens_num = 72
+
+                    # Keep original special-case behavior for specific budgets.
                     if tokens_num == 1872:
                         if order in [0]:
                             remain_tokens_num = 576
@@ -200,12 +219,12 @@ class LlavaMetaForCausalLM(ABC):
                             remain_tokens_num = 288
                         else:
                             remain_tokens_num = 144
-                            # print(remain_tokens_num)
                     if tokens_num == 504:
                         if order in [0]:
                             remain_tokens_num = 144
                         else:
                             remain_tokens_num = 72
+
                 elif num_frames == 12:
                     if order in [0, 1]:
                         remain_tokens_num = 288
@@ -215,113 +234,129 @@ class LlavaMetaForCausalLM(ABC):
                         remain_tokens_num = 72
             else:
                 remain_tokens_num = tokens_num // num_frames
-            # print(remain_tokens_num)
-            if prune_mode == "cls_new_token_sim" or prune_mode == "uniform_token":
-                cls_sim = cls_att[i]  # importance score
-                cls_normalized_cosine_sim = (cls_sim - cls_sim.min()) / (
-                    cls_sim.max() - cls_sim.min()
-                )
-                # 576.
-                features_normalized = image_feature / image_feature.norm(
-                    dim=1, keepdim=True
-                )
-                # token features
-                # Efficient way to compute pairwise cosine similarity using matrix multiplication
-                token_sim = (
-                    torch.sum(
-                        torch.matmul(
-                            features_normalized, features_normalized.t()
-                        ).fill_diagonal_(0),
-                        dim=1,
-                    )
-                    / 575
-                )
-                # Redundancy score: average cosine similarity between one token and the other 575 tokens.
-                normalized_token_sim = (token_sim - token_sim.min()) / (
-                    token_sim.max() - token_sim.min()
-                )
-                # 576
-                # print(cls_normalized_cosine_sim.device)
-                # print(normalized_token_sim.device)
-                rate = torch.tensor(rate, device=cls_normalized_cosine_sim.device)
-                cosine_sim = cls_normalized_cosine_sim * rate + (
-                    1 - normalized_token_sim
-                ) * (1 - rate)
 
-            _, top_k_indices = torch.topk(cosine_sim, remain_tokens_num, largest=True)
+            # Build per-token score:
+            # 1) cls_att gives token importance wrt CLS.
+            # 2) token-token similarity gives redundancy (higher = more redundant).
+            # 3) combine them with "rate" as weighting factor.
+            cls_sim = cls_att[frame_idx]
+            cls_score = (cls_sim - cls_sim.min()) / (cls_sim.max() - cls_sim.min())
 
+            normalized_features = frame_patch_features / frame_patch_features.norm(
+                dim=1, keepdim=True
+            )
+            pairwise_sim = torch.matmul(normalized_features, normalized_features.t())
+            pairwise_sim = pairwise_sim.fill_diagonal_(0)
+            token_redundancy = torch.sum(pairwise_sim, dim=1) / 575
+            redundancy_score = (token_redundancy - token_redundancy.min()) / (
+                token_redundancy.max() - token_redundancy.min()
+            )
+
+            rate_tensor = torch.tensor(rate, device=cls_score.device)
+            combined_score = cls_score * rate_tensor + (1 - redundancy_score) * (
+                1 - rate_tensor
+            )
+
+            # Keep top-K tokens, then restore token order for stable sequence layout.
+            _, top_k_indices = torch.topk(
+                combined_score, remain_tokens_num, largest=True
+            )
             top_k_indices = top_k_indices.sort()[0]
-            temp = image_feature[top_k_indices]
-            temp_features.append(self.get_model().mm_projector(temp).unsqueeze(0))
-        # image_features = self.get_model().mm_projector(image_features)
-        image_features = torch.cat(temp_features, dim=1)
+            selected_tokens = frame_patch_features[top_k_indices]
+
+            # Project selected tokens to language hidden size.
+            selected_projected_features.append(projector(selected_tokens).unsqueeze(0))
+
+        image_features = torch.cat(selected_projected_features, dim=1)
         print(image_features.shape)
         return image_features
 
     def temporal_aggregation(self, image_features, temporal_aggregation):
+        """
+        Aggregate frame-level patch features across space/time.
+
+        Expected input shape:
+        - image_features: [T, N, D]
+          T: number of frames
+          N: number of patch tokens per frame
+          D: feature dimension
+
+        Output shape is always batched as [1, *, D] for downstream consumption.
+        """
         T, N, D = image_features.shape
 
         if temporal_aggregation == "concat":
-            ## temporal cat
-            image_features = image_features.view(T * N, D)
+            # Flatten frame and patch axes: [T, N, D] -> [T*N, D].
+            aggregated = image_features.view(T * N, D)
+
         elif temporal_aggregation == "spatial_1d_max_pool":
-            ## horizontal max pool + temporal cat
-            pool2 = nn.MaxPool1d(kernel_size=2, stride=2)
-            image_features = rearrange(image_features, "t n d -> t d n")
-            image_features = pool2(image_features)
-            image_features = rearrange(image_features, "t d n -> t n d", t=T)
-            # image_features = image_features.view(-1, D)
-            image_features = image_features.reshape(-1, D)
+            # 1D pool over token axis inside each frame, then concatenate frames.
+            pooled = rearrange(image_features, "t n d -> t d n")
+            pooled = nn.MaxPool1d(kernel_size=2, stride=2)(pooled)
+            pooled = rearrange(pooled, "t d n -> t n d", t=T)
+            aggregated = pooled.reshape(-1, D)
+
         elif temporal_aggregation == "spatial_1d_avg_pool":
-            ## horizontal avg pool + temporal cat
-            pool2 = nn.AvgPool1d(kernel_size=2, stride=2)
-            image_features = rearrange(image_features, "t n d -> t d n")
-            image_features = pool2(image_features)
-            image_features = rearrange(image_features, "t d n -> t n d", t=T)
-            image_features = image_features.view(-1, D)
+            # Same as above but with average pooling.
+            pooled = rearrange(image_features, "t n d -> t d n")
+            pooled = nn.AvgPool1d(kernel_size=2, stride=2)(pooled)
+            pooled = rearrange(pooled, "t d n -> t n d", t=T)
+            aggregated = pooled.view(-1, D)
+
         elif temporal_aggregation == "spatial_2d_max_pool":
-            ## spatial max pool + temporal cat
+            # Rebuild patch grid, apply 2D max pooling per frame, then flatten back.
             n0 = n1 = int(math.sqrt(N))
-            pool2 = nn.MaxPool2d(kernel_size=2, stride=2)
-            image_features = rearrange(
+            pooled = rearrange(
                 image_features, "t (n0 n1) d -> d t n0 n1", n0=n0, n1=n1
             )
-            image_features = pool2(image_features)
-            image_features = rearrange(image_features, "d t n0 n1 -> (t n0 n1) d")
+            pooled = nn.MaxPool2d(kernel_size=2, stride=2)(pooled)
+            aggregated = rearrange(pooled, "d t n0 n1 -> (t n0 n1) d")
+
         elif temporal_aggregation == "spatial_2d_avg_pool":
-            ## spatial avg pool + temporal cat
+            # Rebuild patch grid, apply 2D average pooling per frame, then flatten back.
             n0 = n1 = int(math.sqrt(N))
-            pool2 = nn.AvgPool2d(kernel_size=2, stride=2)
-            image_features = rearrange(
+            pooled = rearrange(
                 image_features, "t (n0 n1) d -> d t n0 n1", n0=n0, n1=n1
             )
-            image_features = pool2(image_features)
-            image_features = rearrange(image_features, "d t n0 n1 -> (t n0 n1) d")
+            pooled = nn.AvgPool2d(kernel_size=2, stride=2)(pooled)
+            aggregated = rearrange(pooled, "d t n0 n1 -> (t n0 n1) d")
+
         elif temporal_aggregation == "spatial_temporal_pool":
-            ## spatial pool + temporal pool
+            # Joint spatio-temporal adaptive pooling to a fixed output volume.
             pooling_size = (16, 12, 12)
             n0 = n1 = int(math.sqrt(N))
-            pool3 = nn.AdaptiveAvgPool3d(pooling_size)
-            image_features = rearrange(
+            pooled = rearrange(
                 image_features, "t (n0 n1) d -> d t n0 n1", n0=n0, n1=n1
             )
-            image_features = pool3(image_features)
-            image_features = rearrange(image_features, "d t n0 n1 -> (t n0 n1) d")
+            pooled = nn.AdaptiveAvgPool3d(pooling_size)(pooled)
+            aggregated = rearrange(pooled, "d t n0 n1 -> (t n0 n1) d")
+
         elif temporal_aggregation == "temporal_global_pool":
-            ## temporal pool
-            image_features = torch.mean(image_features, dim=0)
+            # Average across frames only: [T, N, D] -> [N, D].
+            aggregated = torch.mean(image_features, dim=0)
+
         else:
             raise ValueError(
                 f"Unknown temporal aggregation method: {temporal_aggregation}"
             )
 
-        image_features = image_features.unsqueeze(0)
-        return image_features
+        return aggregated.unsqueeze(0)
 
     def prepare_ktv(self, image_features, temporal_aggregation):
+        """
+        Build KTV dual-path features from per-frame patch tokens.
+
+        `temporal_aggregation` format:
+        "ktv-slow_{num}frms_{slow_agg}-fast_{h}x{w}"
+        Example:
+        "ktv-slow_10frms_spatial_1d_max_pool-fast_4x4"
+
+        Output:
+        - Concatenation of slow-path and fast-path features, shape [1, K, D].
+        """
         T, N, D = image_features.shape
 
-        # Example: temporal_aggregation = "ktv-slow_10frms_spatial_1d_max_pool-fast_4x4"
+        # Parse KTV config string.
         ktv_match = re.match(
             r"^ktv-slow_(\d+)frms_(\w+)-fast_(\d+)x(\d+)$", temporal_aggregation
         )
@@ -329,37 +364,34 @@ class LlavaMetaForCausalLM(ABC):
             raise ValueError(
                 f"Failed to parse the temporal aggregation for ktv: {temporal_aggregation}"
             )
-        num_slowpath = int(ktv_match.group(1))
-        slowpath_temporal_aggregation = ktv_match.group(2)
-        fastpath_output_size = (
-            int(ktv_match.group(3)),
-            int(ktv_match.group(4)),
-        )
 
-        # Prepare slow pathway
-        slowpath_idx = torch.linspace(0, T, num_slowpath + 1)
+        num_slowpath_frames = int(ktv_match.group(1))
+        slowpath_aggregation = ktv_match.group(2)
+        fastpath_output_size = (int(ktv_match.group(3)), int(ktv_match.group(4)))
+
+        # Slow pathway:
+        # sample frames uniformly along the timeline, then apply configured aggregation.
+        slowpath_idx = torch.linspace(0, T, num_slowpath_frames + 1)
         slowpath_idx = slowpath_idx.to(torch.int32).tolist()
-        slowpath_idx.pop()
+        slowpath_idx.pop()  # remove endpoint T (out of valid index range)
         slowpath_features = self.temporal_aggregation(
-            image_features[slowpath_idx],
-            slowpath_temporal_aggregation,
+            image_features[slowpath_idx], slowpath_aggregation
         )
 
-        # Prepare fast pathway
-        fastpath_features = image_features  # [T N D]
-        pool2 = nn.AdaptiveAvgPool2d(fastpath_output_size)
+        # Fast pathway:
+        # keep full temporal resolution, but spatially downsample each frame grid.
         n0 = n1 = int(math.sqrt(N))
         fastpath_features = rearrange(
-            fastpath_features, "t (n0 n1) d -> d t n0 n1", n0=n0, n1=n1
-        )  # [T N D] -> [D T N0 N1]
-        fastpath_features = pool2(fastpath_features)
-        fastpath_features = rearrange(
-            fastpath_features, "d t n0 n1 -> (t n0 n1) d"
-        )  # [D T N0/2 N1/2] -> [-1 D]
+            image_features, "t (n0 n1) d -> d t n0 n1", n0=n0, n1=n1
+        )
+        fastpath_features = nn.AdaptiveAvgPool2d(fastpath_output_size)(
+            fastpath_features
+        )
+        fastpath_features = rearrange(fastpath_features, "d t n0 n1 -> (t n0 n1) d")
         fastpath_features = fastpath_features.unsqueeze(0)
 
-        ktv_features = torch.cat((slowpath_features, fastpath_features), dim=1)
-        return ktv_features
+        # Final KTV token stream: slow-path tokens first, then fast-path tokens.
+        return torch.cat((slowpath_features, fastpath_features), dim=1)
 
     def prepare_inputs_labels_for_multimodal(
         self,
