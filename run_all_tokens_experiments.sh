@@ -9,6 +9,22 @@ TOKEN_LIST=(${TOKEN_LIST:-504 936 1872})
 RATE="${RATE:-0.2}"
 UPPER_BOUND_NUM_FRAMES_LIST=(${UPPER_BOUND_NUM_FRAMES_LIST:-12 16 20 24 28 32 36 40 44 48})
 
+resolve_inference_experiment() {
+  local dataset="$1"
+  case "${dataset}" in
+    videomme) echo "videomme_6keyframe" ;;
+    *) echo "${dataset}" ;;
+  esac
+}
+
+resolve_keyframe_experiment() {
+  local dataset="$1"
+  case "${dataset}" in
+    videomme_6keyframe) echo "videomme" ;;
+    *) echo "${dataset}" ;;
+  esac
+}
+
 run_and_eval() {
   local dataset="$1"
   local keyframe_json="$2"
@@ -26,6 +42,8 @@ run_and_eval() {
   done
 
   local run_prefix="${dataset}"
+  local experiment_name
+  experiment_name="$(resolve_inference_experiment "${dataset}")"
   local output_name
   if [[ "${uses_tokens_num}" -eq 1 ]]; then
     output_name="${run_prefix}_${variant_name}_tokens${tokens_num}"
@@ -40,7 +58,7 @@ run_and_eval() {
   echo "=================================================="
 
   uv run python run_inference_multiple_choice_qa.py \
-    experiment="${dataset}" \
+    experiment="${experiment_name}" \
     output_name="${output_name}" \
     "$@"
 
@@ -51,11 +69,12 @@ run_and_eval() {
 
 # Phase 1: keyframe prep + all non-upper-bound variants.
 for dataset in "${DATASETS[@]}"; do
+  experiment_name="$(resolve_keyframe_experiment "${dataset}")"
   keyframe_json="outputs/${dataset}_keyframe6_order.json"
 
   echo "Phase 1: preparing keyframes for ${dataset}"
-  uv run python keyframe_select_new.py experiment="${dataset}"
-  uv run python cluster_keyframe_and_order.py experiment="${dataset}"
+  uv run python keyframe_select_new.py experiment="${experiment_name}"
+  uv run python cluster_keyframe_and_order.py experiment="${experiment_name}"
 
   echo "Phase 1: running non-upper-bound variants for ${dataset}"
   for tokens_num in "${TOKEN_LIST[@]}"; do
