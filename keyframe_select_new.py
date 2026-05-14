@@ -19,11 +19,6 @@ def configure_hf_cache():
         os.environ["HF_HUB_CACHE"] = hub_cache
         os.environ["HUGGINGFACE_HUB_CACHE"] = hub_cache
 
-    transformers_cache = os.environ.get("TRANSFORMERS_CACHE")
-    if not transformers_cache or transformers_cache.startswith(f"{STALE_HF_HOME}/"):
-        os.environ["TRANSFORMERS_CACHE"] = os.path.join(hf_home, "transformers")
-
-
 configure_hf_cache()
 
 import cv2

@@ -1,0 +1,13 @@
+# @package _global_
+# NExTQA upper-bound style run with much denser uniform frame sampling.
+device: cuda
+video_dir: datasets/NExTQA/videos
+gt_file: playground/gt_qa_files/NExTQA/val_qa.json
+output_dir: outputs
+output_name: nextqa_upper_bound
+model_path: liuhaotian/llava-v1.6-vicuna-7b
+
+conv_mode: multiple_choice_allvideo_34b_v4
+num_frames: 48
+image_aspect_ratio: resize
+rope_scaling_factor: 2

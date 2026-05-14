@@ -42,6 +42,33 @@ def resolve_path(path):
     return to_absolute_path(path)
 
 
+def load_answered_ids(output_path: str) -> set[str]:
+    """Collect answered IDs from an existing JSONL output file."""
+    answered_ids: set[str] = set()
+    if not os.path.exists(output_path):
+        return answered_ids
+
+    with open(output_path, "r", encoding="utf-8") as f:
+        for line_number, line in enumerate(f, start=1):
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                data = json.loads(line)
+            except json.JSONDecodeError:
+                print(
+                    f"Warning: skipping invalid JSON on line {line_number} in {output_path}"
+                )
+                continue
+
+            # Use id as the canonical key; fall back to question_id for compatibility.
+            answer_id = data.get("id", data.get("question_id"))
+            if answer_id is None:
+                continue
+            answered_ids.add(str(answer_id))
+    return answered_ids
+
+
 def llava_inference(
     video_frames: Sequence[Image.Image],
     question: str,
@@ -143,11 +170,14 @@ def run_inference(args):
     )
 
     # Load optional precomputed keyframe selections. The expected format is:
-    # {question_id: [[frame_index, rank], ...]}.
+    # {id/question_id: [[frame_index, rank], ...]}.
     keyframes_by_question = {}
     if key_frame_path:
         with open(key_frame_path, "r") as f:
-            keyframes_by_question = json.load(f)
+            keyframes_by_question = {
+                str(question_id): keyframes
+                for question_id, keyframes in json.load(f).items()
+            }
 
     # Override image aspect ratio when the experiment config requests it.
     if args.image_aspect_ratio:
@@ -162,20 +192,15 @@ def run_inference(args):
     # generated question IDs are skipped so interrupted runs can resume.
     os.makedirs(output_dir, exist_ok=True)
     output_path = os.path.join(output_dir, f"{args.output_name}.json")
-    generated_ids = set()
-    if os.path.exists(output_path):
-        with open(output_path, "r") as f:
-            for line in f:
-                data = json.loads(line)
-                generated_ids.add(data["id"])
+    generated_ids = load_answered_ids(output_path)
     output_mode = "a" if os.path.exists(output_path) else "w"
 
-    with open(output_path, output_mode) as ans_file:
+    with open(output_path, output_mode, encoding="utf-8") as ans_file:
         # Process each QA sample independently: load frames, run LLaVA, write result.
         for sample in tqdm(gt_qa_pairs):
             video_name = sample["video_name"]
-            question_id = sample["question_id"]
-            if question_id in generated_ids:
+            answer_id = str(sample.get("id", sample.get("question_id")))
+            if answer_id in generated_ids:
                 continue
 
             question = sample["question"]
@@ -188,7 +213,8 @@ def run_inference(args):
             sample_set = {
                 "task_name": sample["task_name"],
                 "question": question,
-                "id": question_id,
+                "question_id": str(sample.get("question_id", answer_id)),
+                "id": answer_id,
                 "answer_number": sample["answer_number"],
                 "candidates": candidates,
                 "answer": sample["answer"],
@@ -197,7 +223,7 @@ def run_inference(args):
             # If keyframes exist for this question, pass the selected frame IDs into
             # video loading and build keyframe_order in sorted-frame order. The model
             # uses that order to assign token budgets to the loaded frames.
-            keyframe = keyframes_by_question.get(question_id)
+            keyframe = keyframes_by_question.get(answer_id)
             if keyframe:
                 frame_to_rank = {frame_index: rank for frame_index, rank in keyframe}
                 keyframe_order = [
@@ -239,6 +265,7 @@ def run_inference(args):
             print(output)
             sample_set["pred"] = output
             ans_file.write(json.dumps(sample_set) + "\n")
+            generated_ids.add(answer_id)
 
 
 @hydra.main(config_path="configs/inference", config_name="config", version_base=None)
