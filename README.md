@@ -101,6 +101,29 @@ Expected paths after setup:
 - videos: `datasets/Video-MME/data`
 - QA file: `playground/gt_qa_files/Videomme/val_qa.json`
 
+### 3.3 EgoSchema
+
+Prepare videos and build QA JSON:
+
+```bash
+bash scripts/data/prepare_egoschema_dataset.sh
+```
+
+Useful overrides:
+
+```bash
+# use pre-downloaded EgoSchema files and skip downloading
+DOWNLOAD_RAW=never bash scripts/data/prepare_egoschema_dataset.sh \
+  /abs/path/to/EgoSchema \
+  datasets/EgoSchema/videos \
+  playground/gt_qa_files/EgoSchema/EgoSchema.csv \
+  playground/gt_qa_files/EgoSchema
+```
+
+Expected paths after setup:
+- videos: `datasets/EgoSchema/videos`
+- QA file: `playground/gt_qa_files/EgoSchema/val_qa.json`
+
 ## 4) Run Keyframe Preparation
 
 KTV keyframe pipeline has two steps:

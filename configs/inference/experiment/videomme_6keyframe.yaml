@@ -1,7 +1,7 @@
 # @package _global_
 # Example Video-MME experiment matching the README command style.
 video_dir: datasets/Video-MME/data
-gt_file: ktv/playground/gt_qa_files/Videomme/val_qa.json
+gt_file: playground/gt_qa_files/Videomme/val_qa.json
 output_dir: outputs
 output_name: videomme_6keyframe
 model_path: liuhaotian/llava-v1.6-vicuna-7b
