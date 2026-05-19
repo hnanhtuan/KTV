@@ -25,7 +25,7 @@ source .venv/bin/activate
 ```bash
 uv pip install -e ./ktv/llava
 uv pip install -e .
-uv pip install opencv-python numpy==1.26.2 protobuf transformers_stream_generator
+uv pip install opencv-python-headless numpy==1.26.2 protobuf transformers_stream_generator
 ```
 
 If PyTorch is not already installed (or CUDA build does not match your machine), install the right build with `uv pip install ...` from the official PyTorch selector.

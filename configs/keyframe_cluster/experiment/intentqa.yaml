@@ -1,0 +1,9 @@
+# @package _global_
+# Cluster DINOv2 frame features and rank IntentQA keyframes with CLIP.
+json_path: playground/gt_qa_files/IntentQA/val_qa.json
+video_path: datasets/IntentQA/videos
+video_frame_tensor_path: ktv/save_tensor/IntentQA
+save_cluster_path: outputs/intentqa_keyframes
+combined_output_path: outputs/intentqa_keyframe6_order.json
+dataset: IntentQA
+device: auto

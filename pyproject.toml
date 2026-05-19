@@ -7,12 +7,16 @@ dependencies = [
     "clip @ git+https://github.com/openai/CLIP.git",
     "decord>=0.6.0",
     "hydra-core>=1.3.2",
+    "llava",
     "numpy<2",
     "omegaconf>=2.3.0",
+    "protobuf>=4.25.0",
     "torch",
     "torchvision",
     "torchaudio",
     "pyarrow>=24.0.0",
+    "yt-dlp>=2026.3.17",
+    "opencv-python-headless>=4.11.0.86",
 ]
 
 [[tool.uv.index]]
@@ -24,6 +28,7 @@ explicit = true
 torch = { index = "pytorch-cu128" }
 torchvision = { index = "pytorch-cu128" }
 torchaudio = { index = "pytorch-cu128" }
+llava = { path = "ktv/llava", editable = true }
 
 [tool.setuptools.packages.find]
 include = ["ktv*"]
