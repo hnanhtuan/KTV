@@ -9,7 +9,7 @@ import torch
 from omegaconf import DictConfig
 from tqdm import tqdm
 
-import cluster_keyframe_and_order as base
+import cluster_and_rank_keyframes as base
 
 
 def minmax_normalize(values, eps=1e-8):
@@ -332,7 +332,7 @@ def cluster(
 
 
 @hydra.main(
-    config_path="configs/keyframe_cluster", config_name="config", version_base=None
+    config_path="configs/keyframe_ranking", config_name="config", version_base=None
 )
 def main(cfg: DictConfig):
     """Hydra entrypoint. Mirrors original script interface and adds optional weights."""

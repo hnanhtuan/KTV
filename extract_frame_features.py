@@ -332,7 +332,7 @@ def dino_feature_optimized(
     return features
 
 
-def dinov2(json_path, video_path, save_tensor_path, dataset):
+def extract_dinov2_features(json_path, video_path, save_tensor_path, dataset):
     """Extract and save DINOv2 frame features for each video listed in a QA JSON file."""
 
     if not os.path.exists(save_tensor_path):
@@ -403,11 +403,11 @@ def resolve_path(path):
 
 
 @hydra.main(
-    config_path="configs/keyframe_select", config_name="config", version_base=None
+    config_path="configs/frame_feature_extraction", config_name="config", version_base=None
 )
 def main(cfg: DictConfig):
     load_dino_model(cfg.device)
-    dinov2(
+    extract_dinov2_features(
         resolve_path(cfg.json_path),
         resolve_path(cfg.video_path),
         resolve_path(cfg.save_tensor_path),

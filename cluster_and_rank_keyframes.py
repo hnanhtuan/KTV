@@ -367,7 +367,7 @@ def cluster(
     # Create the output folder that will hold one JSON file per question.
     os.makedirs(save_cluster_path, exist_ok=True)
 
-    # Load the precomputed DINOv2 features produced by keyframe_select_new.py.
+    # Load the precomputed DINOv2 features produced by extract_frame_features.py.
     # Expected shape per video: one feature vector for each sampled frame.
     video_frame_tensor = load_video_frame_tensor(video_frame_tensor_path)
 
@@ -525,7 +525,7 @@ def resolve_path(path):
 
 
 @hydra.main(
-    config_path="configs/keyframe_cluster", config_name="config", version_base=None
+    config_path="configs/keyframe_ranking", config_name="config", version_base=None
 )
 def main(cfg: DictConfig):
     load_clip_model(cfg.device)

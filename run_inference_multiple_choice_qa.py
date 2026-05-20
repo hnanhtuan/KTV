@@ -268,7 +268,7 @@ def run_inference(args):
             generated_ids.add(answer_id)
 
 
-@hydra.main(config_path="configs/inference", config_name="config", version_base=None)
+@hydra.main(config_path="configs/qa_inference", config_name="config", version_base=None)
 def main(cfg: DictConfig):
     run_inference(cfg)
 

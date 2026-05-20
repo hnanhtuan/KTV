@@ -48,8 +48,8 @@ run_and_eval() {
 }
 
 echo "Step 1/2: preparing keyframes for KTV variants"
-uv run python keyframe_select_new.py experiment=nextqa
-uv run python cluster_keyframe_and_order.py experiment=nextqa
+uv run python extract_frame_features.py experiment=nextqa
+uv run python cluster_and_rank_keyframes.py experiment=nextqa
 
 echo "Step 2/2: running inference variants"
 

@@ -133,8 +133,8 @@ KTV keyframe pipeline has two steps:
 ### 4.1 NExTQA
 
 ```bash
-uv run python keyframe_select_new.py experiment=nextqa
-uv run python cluster_keyframe_and_order.py experiment=nextqa
+uv run python extract_frame_features.py experiment=nextqa
+uv run python cluster_and_rank_keyframes.py experiment=nextqa
 ```
 
 Output keyframe JSON:
@@ -143,8 +143,8 @@ Output keyframe JSON:
 ### 4.2 Video-MME
 
 ```bash
-uv run python keyframe_select_new.py experiment=videomme
-uv run python cluster_keyframe_and_order.py experiment=videomme
+uv run python extract_frame_features.py experiment=videomme
+uv run python cluster_and_rank_keyframes.py experiment=videomme
 ```
 
 Output keyframe JSON:

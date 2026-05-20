@@ -73,8 +73,8 @@ for dataset in "${DATASETS[@]}"; do
   keyframe_json="outputs/${dataset}_keyframe6_order.json"
 
   echo "Phase 1: preparing keyframes for ${dataset}"
-  uv run python keyframe_select_new.py experiment="${experiment_name}"
-  uv run python cluster_keyframe_and_order.py experiment="${experiment_name}"
+  uv run python extract_frame_features.py experiment="${experiment_name}"
+  uv run python cluster_and_rank_keyframes.py experiment="${experiment_name}"
 
   echo "Phase 1: running non-upper-bound variants for ${dataset}"
   for tokens_num in "${TOKEN_LIST[@]}"; do
