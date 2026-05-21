@@ -497,16 +497,9 @@ class LlavaMetaForCausalLM(ABC):
                     f"Unexpected mm_patch_merge_type: {self.config.mm_patch_merge_type}"
                 )
         else:
-            # image_features = self.encode_images(images)
-            import time
-
-            start_time = time.time()
             image_features = self.encode_images(
                 images, keyframe_order, num_frames, prune_mode, global_rate, tokens_num
             )
-            end_time = time.time()
-
-            print(f"Execution time: {end_time - start_time:.6f} seconds")
             # exit(0)
         # if temporal_aggregation and \
         #    temporal_aggregation.lower() != 'none' and \

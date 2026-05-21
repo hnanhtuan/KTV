@@ -28,6 +28,7 @@ from ktv.llava.mm_utils import (
 )
 
 from dataset import load_video
+from eval.compute_accuracy import prediction_to_index
 from prompt import get_multiple_choice_prompt
 from utils import get_chunk
 
@@ -42,11 +43,11 @@ def resolve_path(path):
     return to_absolute_path(path)
 
 
-def load_answered_ids(output_path: str) -> set[str]:
-    """Collect answered IDs from an existing JSONL output file."""
-    answered_ids: set[str] = set()
+def load_answered_records(output_path: str) -> dict[str, dict[str, Any]]:
+    """Load existing predictions keyed by id for resumable running metrics."""
+    answered_records: dict[str, dict[str, Any]] = {}
     if not os.path.exists(output_path):
-        return answered_ids
+        return answered_records
 
     with open(output_path, "r", encoding="utf-8") as f:
         for line_number, line in enumerate(f, start=1):
@@ -65,8 +66,19 @@ def load_answered_ids(output_path: str) -> set[str]:
             answer_id = data.get("id", data.get("question_id"))
             if answer_id is None:
                 continue
-            answered_ids.add(str(answer_id))
-    return answered_ids
+            answered_records[str(answer_id)] = data
+    return answered_records
+
+
+def is_correct_prediction(record: dict[str, Any]) -> bool:
+    """Return whether a prediction matches its multiple-choice answer."""
+    predicted_index = prediction_to_index(
+        record.get("pred"), record.get("candidates", [])
+    )
+    return (
+        predicted_index is not None
+        and predicted_index == record.get("answer_number")
+    )
 
 
 def llava_inference(
@@ -192,12 +204,31 @@ def run_inference(args):
     # generated question IDs are skipped so interrupted runs can resume.
     os.makedirs(output_dir, exist_ok=True)
     output_path = os.path.join(output_dir, f"{args.output_name}.json")
-    generated_ids = load_answered_ids(output_path)
+    answered_records = load_answered_records(output_path)
+    chunk_ids = {
+        str(sample.get("id", sample.get("question_id"))) for sample in gt_qa_pairs
+    }
+    answered_records = {
+        answer_id: record
+        for answer_id, record in answered_records.items()
+        if answer_id in chunk_ids
+    }
+    generated_ids = set(answered_records)
     output_mode = "a" if os.path.exists(output_path) else "w"
+    correct_count = sum(
+        is_correct_prediction(record) for record in answered_records.values()
+    )
+    answered_count = len(answered_records)
 
     with open(output_path, output_mode, encoding="utf-8") as ans_file:
         # Process each QA sample independently: load frames, run LLaVA, write result.
-        for sample in tqdm(gt_qa_pairs):
+        progress = tqdm(gt_qa_pairs)
+        if answered_count:
+            progress.set_postfix(
+                acc=f"{correct_count / answered_count:.4f}",
+                correct=f"{correct_count}/{answered_count}",
+            )
+        for sample in progress:
             video_name = sample["video_name"]
             answer_id = str(sample.get("id", sample.get("question_id")))
             if answer_id in generated_ids:
@@ -262,10 +293,16 @@ def run_inference(args):
                 dtype=dtype,
             )
             output = output.replace("In the image", "In the video")
-            print(output)
             sample_set["pred"] = output
             ans_file.write(json.dumps(sample_set) + "\n")
             generated_ids.add(answer_id)
+            answered_count += 1
+            if is_correct_prediction(sample_set):
+                correct_count += 1
+            progress.set_postfix(
+                acc=f"{correct_count / answered_count:.4f}",
+                correct=f"{correct_count}/{answered_count}",
+            )
 
 
 @hydra.main(config_path="configs/qa_inference", config_name="config", version_base=None)

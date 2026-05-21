@@ -229,9 +229,6 @@ def cluster(
         tensor = base.get_tensor_for_video(video_frame_tensor, video_name)
         if tensor is None:
             missing_tensor_count += 1
-            print(
-                f"missing_feature_tensor question_id={question_id} video_name={video_name}"
-            )
             continue
 
         # Stage 1: temporal-chain selection in feature index space.
@@ -273,7 +270,6 @@ def cluster(
         # Preprocess candidate frames for CLIP image encoder.
         image_batch = [base.preprocess_clip(frame) for frame in frames_cluster]
         if not image_batch:
-            print(f"skip_empty_frames question_id={question_id} video_name={video_name}")
             continue
 
         # Keep question text within a manageable token span.

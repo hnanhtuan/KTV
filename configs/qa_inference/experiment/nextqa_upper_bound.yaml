@@ -3,7 +3,7 @@
 device: cuda
 video_dir: datasets/NExTQA/videos
 gt_file: playground/gt_qa_files/NExTQA/val_qa.json
-output_dir: outputs
+output_dir: outputs/nextqa
 output_name: nextqa_upper_bound
 model_path: liuhaotian/llava-v1.6-vicuna-7b
 

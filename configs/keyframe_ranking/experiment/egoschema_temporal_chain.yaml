@@ -1,0 +1,9 @@
+# @package _global_
+# Temporal-chain DINOv2 frame ranking for EgoSchema (isolated outputs).
+json_path: playground/gt_qa_files/EgoSchema/val_qa.json
+video_path: datasets/EgoSchema/videos
+video_frame_tensor_path: ktv/save_tensor/EgoSchema
+save_cluster_path: outputs/egoschema/egoschema_temporal_chain_keyframes
+combined_output_path: outputs/egoschema/egoschema_temporal_chain_keyframe6_order.json
+dataset: EgoSchema
+device: auto

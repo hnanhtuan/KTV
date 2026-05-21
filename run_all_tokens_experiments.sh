@@ -50,8 +50,11 @@ run_and_eval() {
   else
     output_name="${run_prefix}_${variant_name}"
   fi
-  local pred_path="outputs/${output_name}.json"
-  local acc_path="outputs/${output_name}_accuracy.txt"
+  local output_dir="outputs/${dataset}"
+  local pred_path="${output_dir}/${output_name}.json"
+  local acc_path="${output_dir}/${output_name}_accuracy.txt"
+
+  mkdir -p "${output_dir}"
 
   echo "=================================================="
   echo "Dataset: ${dataset} | Tokens: ${tokens_num} | Variant: ${variant_name}"
@@ -59,6 +62,7 @@ run_and_eval() {
 
   uv run python run_inference_multiple_choice_qa.py \
     experiment="${experiment_name}" \
+    output_dir="${output_dir}" \
     output_name="${output_name}" \
     "$@"
 
@@ -70,7 +74,7 @@ run_and_eval() {
 # Phase 1: keyframe prep + all non-upper-bound variants.
 for dataset in "${DATASETS[@]}"; do
   experiment_name="$(resolve_keyframe_experiment "${dataset}")"
-  keyframe_json="outputs/${dataset}_keyframe6_order.json"
+  keyframe_json="outputs/${dataset}/${dataset}_keyframe6_order.json"
 
   echo "Phase 1: preparing keyframes for ${dataset}"
   uv run python extract_frame_features.py experiment="${experiment_name}"
@@ -120,7 +124,7 @@ done
 
 # Phase 2: run upper-bound variants in a separate dataset/token/frame sweep.
 for dataset in "${DATASETS[@]}"; do
-  keyframe_json="outputs/${dataset}_keyframe6_order.json"
+  keyframe_json="outputs/${dataset}/${dataset}_keyframe6_order.json"
   echo "Phase 2: running upper-bound variants for ${dataset}"
   for tokens_num in "${TOKEN_LIST[@]}"; do
     for upper_bound_num_frames in "${UPPER_BOUND_NUM_FRAMES_LIST[@]}"; do

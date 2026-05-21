@@ -3,7 +3,7 @@
 device: cuda
 video_dir: datasets/EgoSchema/videos
 gt_file: playground/gt_qa_files/EgoSchema/val_qa.json
-output_dir: outputs
+output_dir: outputs/egoschema
 output_name: egoschema
 model_path: liuhaotian/llava-v1.6-vicuna-7b
 

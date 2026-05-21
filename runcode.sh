@@ -6,7 +6,8 @@ export HF_HUB_CACHE="${HF_HUB_CACHE:-${HF_HOME}/hub}"
 
 EXPERIMENT="${EXPERIMENT:-nextqa}"
 RUN_PREFIX="${RUN_PREFIX:-nextqa}"
-KEYFRAME_JSON="${KEYFRAME_JSON:-outputs/nextqa_keyframe6_order.json}"
+OUTPUT_DIR="${OUTPUT_DIR:-outputs/${RUN_PREFIX}}"
+KEYFRAME_JSON="${KEYFRAME_JSON:-${OUTPUT_DIR}/${RUN_PREFIX}_keyframe6_order.json}"
 RATE="${RATE:-0.2}"
 TOKENS_NUM="${TOKENS_NUM:-1872}"
 UPPER_BOUND_NUM_FRAMES="${UPPER_BOUND_NUM_FRAMES:-48}"
@@ -30,8 +31,10 @@ run_and_eval() {
   else
     output_name="${RUN_PREFIX}_${variant_name}"
   fi
-  local pred_path="outputs/${output_name}.json"
-  local acc_path="outputs/${output_name}_accuracy.txt"
+  local pred_path="${OUTPUT_DIR}/${output_name}.json"
+  local acc_path="${OUTPUT_DIR}/${output_name}_accuracy.txt"
+
+  mkdir -p "${OUTPUT_DIR}"
 
   echo "=================================================="
   echo "Running variant: ${variant_name}"
@@ -39,6 +42,7 @@ run_and_eval() {
 
   uv run python run_inference_multiple_choice_qa.py \
     experiment="${EXPERIMENT}" \
+    output_dir="${OUTPUT_DIR}" \
     output_name="${output_name}" \
     "$@"
 
@@ -48,8 +52,8 @@ run_and_eval() {
 }
 
 echo "Step 1/2: preparing keyframes for KTV variants"
-uv run python extract_frame_features.py experiment=nextqa
-uv run python cluster_and_rank_keyframes.py experiment=nextqa
+uv run python extract_frame_features.py experiment="${EXPERIMENT}"
+uv run python cluster_and_rank_keyframes.py experiment="${EXPERIMENT}"
 
 echo "Step 2/2: running inference variants"
 

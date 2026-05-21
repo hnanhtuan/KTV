@@ -11,7 +11,32 @@ import json
 from hydra.utils import to_absolute_path
 from omegaconf import DictConfig
 import pickle
+
+# Reduce noisy OpenCV/FFmpeg stderr warnings during frame decoding.
+os.environ.setdefault("OPENCV_LOG_LEVEL", "ERROR")
+os.environ.setdefault("OPENCV_FFMPEG_DEBUG", "0")
+os.environ.setdefault("OPENCV_FFMPEG_LOGLEVEL", "8")
 import cv2
+
+
+def _suppress_opencv_ffmpeg_warnings():
+    """Best-effort clamp of OpenCV logger verbosity across OpenCV versions."""
+    try:
+        if hasattr(cv2, "utils") and hasattr(cv2.utils, "logging"):
+            log_mod = cv2.utils.logging
+            if hasattr(log_mod, "LOG_LEVEL_ERROR"):
+                log_mod.setLogLevel(log_mod.LOG_LEVEL_ERROR)
+            elif hasattr(log_mod, "LOG_LEVEL_SILENT"):
+                log_mod.setLogLevel(log_mod.LOG_LEVEL_SILENT)
+        elif hasattr(cv2, "setLogLevel"):
+            # Fallback for older/alternative builds.
+            cv2.setLogLevel(2)
+    except Exception:
+        # Logging configuration should never crash the pipeline.
+        pass
+
+
+_suppress_opencv_ffmpeg_warnings()
 
 device = "cpu"
 model_clip = None
@@ -130,7 +155,6 @@ def load_video(
             raise IOError(f"Cannot open video {video_path}")
 
         total_num_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        print("total_num_frames", total_num_frames)
         fps = cap.get(cv2.CAP_PROP_FPS)
         duration = total_num_frames / fps
 
@@ -145,7 +169,6 @@ def load_video(
             raise ValueError(f"Invalid start/end seconds: start={start}s, end={end}s")
 
         # Compute frame indices
-        print("keyframe", keyframe)
         if keyframe:
             # frame_idx = sorted([k[0] for k in keyframe if clip_start <= k[0] < clip_end])
             # frame_idx = sorted([k for k in keyframe if clip_start <= k < clip_end])
@@ -155,7 +178,6 @@ def load_video(
             m = min(num_frms, n)
             interval = n / m
             frame_idx = [int(clip_start + i * interval) for i in range(m)]
-    print("frame_idx", frame_idx)
     clip_imgs = []
     original_sizes = []
 
@@ -175,7 +197,6 @@ def load_video(
 
     cap.release()
     original_sizes = tuple(original_sizes)
-    print("len", len(clip_imgs))
     return clip_imgs, original_sizes
 
 
@@ -272,7 +293,6 @@ def get_original_frame_number(
     fps: int = None,
     max_frames_to_extract: int = 5400,
 ) -> int:
-    print(total_original_frames)
 
     num_actually_extracted: int
     if total_original_frames <= max_frames_to_extract:

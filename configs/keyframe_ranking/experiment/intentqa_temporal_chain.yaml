@@ -1,0 +1,9 @@
+# @package _global_
+# Temporal-chain DINOv2 frame ranking for IntentQA (isolated outputs).
+json_path: playground/gt_qa_files/IntentQA/val_qa.json
+video_path: datasets/IntentQA/videos
+video_frame_tensor_path: ktv/save_tensor/IntentQA
+save_cluster_path: outputs/intentqa/intentqa_temporal_chain_keyframes
+combined_output_path: outputs/intentqa/intentqa_temporal_chain_keyframe6_order.json
+dataset: IntentQA
+device: auto

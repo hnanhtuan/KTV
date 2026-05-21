@@ -1,0 +1,9 @@
+# @package _global_
+# Temporal-chain DINOv2 frame ranking for NExTQA (isolated outputs).
+json_path: playground/gt_qa_files/NExTQA/val_qa.json
+video_path: datasets/NExTQA/videos
+video_frame_tensor_path: ktv/save_tensor/NExTQA
+save_cluster_path: outputs/nextqa/nextqa_temporal_chain_keyframes
+combined_output_path: outputs/nextqa/nextqa_temporal_chain_keyframe6_order.json
+dataset: NExTQA
+device: auto

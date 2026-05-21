@@ -1,5 +1,14 @@
 import os
+
+# Suppress noisy FFmpeg/OpenCV decoder logs while preserving explicit Python
+# errors such as failure to open a video file. FFmpeg's quiet level is -8.
+os.environ["OPENCV_FFMPEG_LOGLEVEL"] = "-8"
+os.environ["OPENCV_LOG_LEVEL"] = "SILENT"
+
 import cv2
+
+if hasattr(cv2, "setLogLevel"):
+    cv2.setLogLevel(0)
 import numpy as np
 from PIL import Image
 
