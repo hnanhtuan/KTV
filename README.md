@@ -138,7 +138,7 @@ uv run python cluster_and_rank_keyframes.py experiment=nextqa
 ```
 
 Output keyframe JSON:
-- `outputs/nextqa_keyframe6_order.json`
+- `outputs/nextqa/keyframe_selection/keyframe6_order.json`
 
 ### 4.2 Video-MME
 
@@ -148,7 +148,7 @@ uv run python cluster_and_rank_keyframes.py experiment=videomme
 ```
 
 Output keyframe JSON:
-- `outputs/videomme_keyframe6_order.json`
+- `outputs/videomme/keyframe_selection/keyframe6_order.json`
 
 ## 5) Run Inference / Experiments
 
@@ -163,8 +163,8 @@ uv run python run_inference_multiple_choice_qa.py ...
 ```bash
 uv run python run_inference_multiple_choice_qa.py \
   experiment=nextqa \
-  output_name=nextqa_ktv_full_cls_new_token_sim_tokens1872 \
-  key_frame_path=outputs/nextqa_keyframe6_order.json \
+  output_name=predictions_tokens1872 \
+  key_frame_path=outputs/nextqa/keyframe_selection/keyframe6_order.json \
   prune_mode=cls_new_token_sim \
   rate=0.2 \
   tokens_num=1872
@@ -173,7 +173,7 @@ uv run python run_inference_multiple_choice_qa.py \
 ### 5.2 Evaluate predictions
 
 ```bash
-uv run python eval/compute_accuracy.py outputs/nextqa_ktv_full_cls_new_token_sim_tokens1872.json
+uv run python eval/compute_accuracy.py outputs/nextqa/ktv_full_cls_new_token_sim/predictions_tokens1872.json
 ```
 
 ### 5.3 Run standard variant set with one command
@@ -194,7 +194,7 @@ Common overrides:
 ```bash
 EXPERIMENT=nextqa \
 RUN_PREFIX=nextqa \
-KEYFRAME_JSON=outputs/nextqa_keyframe6_order.json \
+KEYFRAME_JSON=outputs/nextqa/keyframe_selection/keyframe6_order.json \
 TOKENS_NUM=1872 \
 RATE=0.2 \
 UPPER_BOUND_NUM_FRAMES=48 \
@@ -202,6 +202,43 @@ bash runcode.sh
 ```
 
 ### 5.4 Run full token sweep for multiple datasets
+
+`run_temporal_chain_experiments.sh` now uses strict `--flag value` parsing.
+Unknown flags fail immediately, which helps catch typos early.
+
+```bash
+bash run_temporal_chain_experiments.sh \
+  --dataset nextqa \
+  --device auto \
+  --run-keyframe-select 1 \
+  --num-keyframes 12 \
+  --num-frames 6 \
+  --tokens-num 936
+```
+
+Common temporal-chain overrides:
+
+```bash
+bash run_temporal_chain_experiments.sh \
+  --dataset nextqa \
+  --output-dir outputs/nextqa/temporal_chain \
+  --keyframe-json outputs/nextqa/temporal_chain/keyframe6_order.json \
+  --output-name predictions \
+  --prune-mode cls_new_token_sim \
+  --rate 0.2 \
+  --tokens-num 1872
+```
+
+Optional stage-specific Hydra overrides (repeatable):
+
+```bash
+bash run_temporal_chain_experiments.sh \
+  --dataset videomme \
+  --feature-override num_workers=8 \
+  --keyframe-override num_keyframes=16 \
+  --inference-override temperature=0.0
+```
+
 
 `run_all_tokens_experiments.sh` runs key variants for all datasets in `DATASETS` and all token budgets in `TOKEN_LIST`, then computes accuracy.
 
@@ -222,14 +259,14 @@ bash run_all_tokens_experiments.sh
 ## 6) Output Files
 
 Inference predictions are written to:
-- `outputs/<output_name>.json`
+- `outputs/<dataset>/<setting>/<output_name>.json`
 
 Accuracy reports are written to:
-- `outputs/<output_name>_accuracy.txt`
+- `outputs/<dataset>/<setting>/accuracy.txt`
 
 Keyframe clustering outputs are written to:
-- per-sample keyframes: `outputs/<dataset>_keyframes/`
-- combined JSON: `outputs/<dataset>_keyframe6_order.json`
+- per-sample keyframes: `outputs/<dataset>/keyframe_selection/keyframes/`
+- combined JSON: `outputs/<dataset>/keyframe_selection/keyframe6_order.json`
 
 ## 7) Notes and Troubleshooting
 

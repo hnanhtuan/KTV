@@ -3,7 +3,7 @@
 json_path: playground/gt_qa_files/IntentQA/val_qa.json
 video_path: datasets/IntentQA/videos
 video_frame_tensor_path: ktv/save_tensor/IntentQA
-save_cluster_path: outputs/intentqa/intentqa_keyframes
-combined_output_path: outputs/intentqa/intentqa_keyframe6_order.json
+save_cluster_path: outputs/intentqa/keyframe_selection/keyframes
+combined_output_path: outputs/intentqa/keyframe_selection/keyframe6_order.json
 dataset: IntentQA
 device: auto

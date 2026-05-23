@@ -3,6 +3,8 @@ import torch.nn as nn
 
 from transformers import CLIPVisionModel, CLIPImageProcessor, CLIPVisionConfig
 
+from llava.model.load_warnings import suppress_meta_parameter_copy_warning
+
 
 def complement_idx(idx, dim):
     a = torch.arange(dim, device=idx.device)
@@ -57,6 +59,7 @@ class CLIPVisionTower(nn.Module):
             )
             return
 
+        suppress_meta_parameter_copy_warning()
         self.image_processor = CLIPImageProcessor.from_pretrained(
             self.vision_tower_name
         )
@@ -210,6 +213,7 @@ class CLIPVisionTowerS2(CLIPVisionTower):
             )
             return
 
+        suppress_meta_parameter_copy_warning()
         self.image_processor = CLIPImageProcessor.from_pretrained(
             self.vision_tower_name
         )

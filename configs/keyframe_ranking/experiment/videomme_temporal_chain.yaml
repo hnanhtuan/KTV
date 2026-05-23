@@ -3,7 +3,7 @@
 json_path: playground/gt_qa_files/Videomme/val_qa.json
 video_path: datasets/Video-MME/data
 video_frame_tensor_path: ktv/save_tensor/Video-MME
-save_cluster_path: outputs/videomme/videomme_temporal_chain_keyframes
-combined_output_path: outputs/videomme/videomme_temporal_chain_keyframe6_order.json
+save_cluster_path: outputs/videomme/temporal_chain_keyframe_selection/keyframes
+combined_output_path: outputs/videomme/temporal_chain_keyframe_selection/keyframe6_order.json
 dataset: Video-MME
 device: auto

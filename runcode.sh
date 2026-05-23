@@ -6,8 +6,8 @@ export HF_HUB_CACHE="${HF_HUB_CACHE:-${HF_HOME}/hub}"
 
 EXPERIMENT="${EXPERIMENT:-nextqa}"
 RUN_PREFIX="${RUN_PREFIX:-nextqa}"
-OUTPUT_DIR="${OUTPUT_DIR:-outputs/${RUN_PREFIX}}"
-KEYFRAME_JSON="${KEYFRAME_JSON:-${OUTPUT_DIR}/${RUN_PREFIX}_keyframe6_order.json}"
+BASE_OUTPUT_DIR="${BASE_OUTPUT_DIR:-outputs/${RUN_PREFIX}}"
+KEYFRAME_JSON="${KEYFRAME_JSON:-${BASE_OUTPUT_DIR}/keyframe_selection/keyframe6_order.json}"
 RATE="${RATE:-0.2}"
 TOKENS_NUM="${TOKENS_NUM:-1872}"
 UPPER_BOUND_NUM_FRAMES="${UPPER_BOUND_NUM_FRAMES:-48}"
@@ -25,16 +25,17 @@ run_and_eval() {
     fi
   done
 
+  local setting_dir="${BASE_OUTPUT_DIR}/${variant_name}"
   local output_name
   if [[ "${uses_tokens_num}" -eq 1 ]]; then
-    output_name="${RUN_PREFIX}_${variant_name}_tokens${TOKENS_NUM}"
+    output_name="predictions_tokens${TOKENS_NUM}"
   else
-    output_name="${RUN_PREFIX}_${variant_name}"
+    output_name="predictions"
   fi
-  local pred_path="${OUTPUT_DIR}/${output_name}.json"
-  local acc_path="${OUTPUT_DIR}/${output_name}_accuracy.txt"
+  local pred_path="${setting_dir}/${output_name}.json"
+  local acc_path="${setting_dir}/accuracy.txt"
 
-  mkdir -p "${OUTPUT_DIR}"
+  mkdir -p "${setting_dir}"
 
   echo "=================================================="
   echo "Running variant: ${variant_name}"
@@ -42,7 +43,7 @@ run_and_eval() {
 
   uv run python run_inference_multiple_choice_qa.py \
     experiment="${EXPERIMENT}" \
-    output_dir="${OUTPUT_DIR}" \
+    output_dir="${setting_dir}" \
     output_name="${output_name}" \
     "$@"
 

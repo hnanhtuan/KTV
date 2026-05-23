@@ -3,8 +3,8 @@
 device: cuda
 video_dir: datasets/IntentQA/videos
 gt_file: playground/gt_qa_files/IntentQA/val_qa.json
-output_dir: outputs/intentqa
-output_name: intentqa
+output_dir: outputs/intentqa/default
+output_name: predictions
 model_path: liuhaotian/llava-v1.6-vicuna-7b
 
 conv_mode: multiple_choice_allvideo_34b_v4

@@ -17,6 +17,12 @@ alpha_gap: 0.6
 beta_redundancy: 0.8
 max_frames_to_extract: 5400
 
+# CLIP Stage 2 precompute defaults. Image features are written to a
+# temporary directory and deleted when the run finishes unless this is set.
+clip_image_batch_size: 128
+clip_text_batch_size: 128
+temp_feature_dir: null
+
 hydra:
   job:
     chdir: false

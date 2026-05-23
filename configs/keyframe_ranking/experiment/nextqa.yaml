@@ -3,7 +3,7 @@
 json_path: playground/gt_qa_files/NExTQA/val_qa.json
 video_path: datasets/NExTQA/videos
 video_frame_tensor_path: ktv/save_tensor/NExTQA
-save_cluster_path: outputs/nextqa/nextqa_keyframes
-combined_output_path: outputs/nextqa/nextqa_keyframe6_order.json
+save_cluster_path: outputs/nextqa/keyframe_selection/keyframes
+combined_output_path: outputs/nextqa/keyframe_selection/keyframe6_order.json
 dataset: NExTQA
 device: auto

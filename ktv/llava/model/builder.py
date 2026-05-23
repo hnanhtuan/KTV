@@ -30,6 +30,7 @@ from llava.constants import (
     DEFAULT_IM_START_TOKEN,
     DEFAULT_IM_END_TOKEN,
 )
+from llava.model.load_warnings import suppress_meta_parameter_copy_warning
 
 
 def load_pretrained_model(
@@ -44,6 +45,8 @@ def load_pretrained_model(
     **kwargs,
 ):
     # kwargs = {"device_map": device_map, **kwargs}
+    suppress_meta_parameter_copy_warning()
+
     dtype = torch.float16 if str(device) == "cuda" else torch.float32
     kwargs["device_map"] = device_map
 
