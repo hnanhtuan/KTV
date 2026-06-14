@@ -2,35 +2,43 @@
 # For licensing see accompanying LICENSE file.
 # Copyright (C) 2024 Apple Inc. All Rights Reserved.
 #
+import json
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Any, Optional, Sequence, Tuple, Union
 
 # sys.path.insert(0, Path(__file__).parent.as_posix())
 sys.path.insert(0, os.path.join(Path(__file__).parent.as_posix(), "ktv"))
-import json
 import hydra
+import torch  # for cuda device
 from PIL import Image
 from tqdm import tqdm
-import torch  # for cuda device
+from transformers import CLIPImageProcessor, PreTrainedTokenizerBase
 
 # import torch_npu  for npu device
 from hydra.utils import to_absolute_path
 from omegaconf import DictConfig
-from ktv.llava.constants import IMAGE_TOKEN_INDEX
-from ktv.llava.model.builder import load_pretrained_model
-from ktv.llava.utils import disable_torch_init
-from ktv.llava.mm_utils import (
-    tokenizer_image_token,
-    process_images,
-    get_model_name_from_path,
+from ktv.core.tracking import (
+    default_shell_artifact_paths,
+    track_run,
+    write_summary_json,
 )
+from ktv.llava.constants import IMAGE_TOKEN_INDEX
+from ktv.llava.mm_utils import (
+    get_model_name_from_path,
+    process_images,
+    tokenizer_image_token,
+)
+from ktv.llava.model.builder import load_pretrained_model
+from ktv.llava.model.language_model.llava_llama import LlavaLlamaForCausalLM
+from ktv.llava.utils import disable_torch_init
 
-from dataset import load_video
+from ktv.core.dataset import load_video
 from eval.compute_accuracy import prediction_to_index
-from prompt import get_multiple_choice_prompt
-from utils import get_chunk
+from ktv.core.prompt import get_multiple_choice_prompt
+from ktv.core.utils import get_chunk
 
 
 def resolve_path(path):
@@ -62,7 +70,6 @@ def load_answered_records(output_path: str) -> dict[str, dict[str, Any]]:
                 )
                 continue
 
-            # Use id as the canonical key; fall back to question_id for compatibility.
             answer_id = data.get("id", data.get("question_id"))
             if answer_id is None:
                 continue
@@ -75,10 +82,7 @@ def is_correct_prediction(record: dict[str, Any]) -> bool:
     predicted_index = prediction_to_index(
         record.get("pred"), record.get("candidates", [])
     )
-    return (
-        predicted_index is not None
-        and predicted_index == record.get("answer_number")
-    )
+    return predicted_index is not None and predicted_index == record.get("answer_number")
 
 
 def llava_inference(
@@ -86,9 +90,9 @@ def llava_inference(
     question: str,
     candidates: Sequence[str],
     conv_mode: str,
-    model: Any,
-    tokenizer: Any,
-    image_processor: Any,
+    model: LlavaLlamaForCausalLM,
+    tokenizer: PreTrainedTokenizerBase,
+    image_processor: CLIPImageProcessor,
     image_sizes: Sequence[Tuple[int, int]],
     temperature: float,
     top_p: Optional[float],
@@ -102,10 +106,7 @@ def llava_inference(
     device: Union[str, torch.device] = "cuda",
     dtype: torch.dtype = torch.float16,
 ) -> str:
-    # Get multiple choice prompt
     prompt = get_multiple_choice_prompt(model, conv_mode, question, candidates)
-    # print(prompt)
-    # Get text inputs
     input_ids = (
         tokenizer_image_token(
             prompt,
@@ -117,7 +118,6 @@ def llava_inference(
         .to(device)
     )
 
-    # Get image inputs
     image_tensor = process_images(video_frames, image_processor, model.config)
 
     with torch.inference_mode():
@@ -146,13 +146,8 @@ def llava_inference(
 
 
 def run_inference(args):
-    """
-    Run inference on Video QA Dataset.
-
-    Args:
-        args: Hydra/OmegaConf config containing dataset, model, and decoding options.
-    """
-    # Keep model initialization lightweight and choose the runtime device once.
+    """Run inference on a multiple-choice video QA dataset."""
+    start_time = time.time()
     disable_torch_init()
     if args.device == "auto":
         device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -162,14 +157,11 @@ def run_inference(args):
     device_map = "auto" if device == "cuda" else {"": "cpu"}
     print(f"Using device: {device}")
 
-    # Resolve paths that refer to local files or folders. Hydra can run from a
-    # different working directory, so resolve_path keeps paths relative to launch dir.
     video_dir = resolve_path(args.video_dir)
     gt_file = resolve_path(args.gt_file)
     output_dir = resolve_path(args.output_dir)
     key_frame_path = resolve_path(args.key_frame_path)
 
-    # Load tokenizer, model, and image preprocessor.
     model_path = os.path.expanduser(args.model_path)
     model_name = get_model_name_from_path(model_path)
     tokenizer, model, image_processor, context_len = load_pretrained_model(
@@ -180,30 +172,27 @@ def run_inference(args):
         device_map=device_map,
         rope_scaling_factor=args.rope_scaling_factor,
     )
+    del context_len
 
-    # Load optional precomputed keyframe selections. The expected format is:
-    # {id/question_id: [[frame_index, rank], ...]}.
     keyframes_by_question = {}
     if key_frame_path:
-        with open(key_frame_path, "r") as f:
+        with open(key_frame_path, "r", encoding="utf-8") as f:
             keyframes_by_question = {
                 str(question_id): keyframes
                 for question_id, keyframes in json.load(f).items()
             }
 
-    # Override image aspect ratio when the experiment config requests it.
     if args.image_aspect_ratio:
         model.config.image_aspect_ratio = args.image_aspect_ratio
 
-    # Load QA samples and optionally keep only this process's shard.
-    with open(gt_file, "r") as f:
+    with open(gt_file, "r", encoding="utf-8") as f:
         gt_qa_pairs = json.load(f)
     gt_qa_pairs = get_chunk(gt_qa_pairs, args.num_chunks, args.chunk_idx)
 
-    # Prepare output file. Existing predictions are appended to, and already
-    # generated question IDs are skipped so interrupted runs can resume.
     os.makedirs(output_dir, exist_ok=True)
     output_path = os.path.join(output_dir, f"{args.output_name}.json")
+    accuracy_path = os.path.join(output_dir, f"{args.output_name}_accuracy.txt")
+    summary_path = os.path.join(output_dir, f"{args.output_name}_summary.json")
     answered_records = load_answered_records(output_path)
     chunk_ids = {
         str(sample.get("id", sample.get("question_id"))) for sample in gt_qa_pairs
@@ -219,9 +208,11 @@ def run_inference(args):
         is_correct_prediction(record) for record in answered_records.values()
     )
     answered_count = len(answered_records)
+    skipped_existing_count = answered_count
+    missing_video_count = 0
+    processed_now_count = 0
 
     with open(output_path, output_mode, encoding="utf-8") as ans_file:
-        # Process each QA sample independently: load frames, run LLaVA, write result.
         progress = tqdm(gt_qa_pairs)
         if answered_count:
             progress.set_postfix(
@@ -239,6 +230,7 @@ def run_inference(args):
             video_path = os.path.join(video_dir, video_name)
             if not os.path.exists(video_path):
                 print(f"Missing video: {video_path}")
+                missing_video_count += 1
                 continue
 
             sample_set = {
@@ -251,9 +243,6 @@ def run_inference(args):
                 "answer": sample["answer"],
             }
 
-            # If keyframes exist for this question, pass the selected frame IDs into
-            # video loading and build keyframe_order in sorted-frame order. The model
-            # uses that order to assign token budgets to the loaded frames.
             keyframe = keyframes_by_question.get(answer_id)
             if keyframe:
                 frame_to_rank = {frame_index: rank for frame_index, rank in keyframe}
@@ -264,13 +253,8 @@ def run_inference(args):
                 keyframe = None
                 keyframe_order = None
 
-            # Load either the selected keyframes or uniformly sampled video frames.
-            video_frames, sizes = load_video(
-                video_path, keyframe, num_frms=args.num_frames
-            )
+            video_frames, sizes = load_video(video_path, keyframe, num_frms=args.num_frames)
 
-            # Run one multiple-choice inference request and normalize image wording
-            # in the generated answer back to video wording.
             output = llava_inference(
                 video_frames,
                 question,
@@ -297,6 +281,7 @@ def run_inference(args):
             ans_file.write(json.dumps(sample_set) + "\n")
             generated_ids.add(answer_id)
             answered_count += 1
+            processed_now_count += 1
             if is_correct_prediction(sample_set):
                 correct_count += 1
             progress.set_postfix(
@@ -304,10 +289,71 @@ def run_inference(args):
                 correct=f"{correct_count}/{answered_count}",
             )
 
+    final_accuracy = correct_count / answered_count if answered_count else 0.0
+    with open(accuracy_path, "w", encoding="utf-8") as accuracy_file:
+        accuracy_file.write(f"{final_accuracy * 100:.4f}\n")
+
+    summary = {
+        "output_path": str(Path(output_path).resolve()),
+        "accuracy_path": str(Path(accuracy_path).resolve()),
+        "summary_path": str(Path(summary_path).resolve()),
+        "output_dir": str(Path(output_dir).resolve()),
+        "dataset": getattr(args, "dataset", None),
+        "device": str(device),
+        "key_frame_path": str(Path(key_frame_path).resolve()) if key_frame_path else None,
+        "num_samples_in_chunk": len(gt_qa_pairs),
+        "answered_count": answered_count,
+        "correct_count": correct_count,
+        "accuracy": final_accuracy,
+        "skipped_existing": skipped_existing_count,
+        "processed_now": processed_now_count,
+        "missing_video_count": missing_video_count,
+        "duration_seconds": time.time() - start_time,
+        "prune_mode": args.prune_mode,
+        "tokens_num": args.tokens_num,
+        "num_frames": args.num_frames,
+    }
+    summary["summary_path"] = write_summary_json(summary_path, summary)
+    return summary
+
 
 @hydra.main(config_path="configs/qa_inference", config_name="config", version_base=None)
 def main(cfg: DictConfig):
-    run_inference(cfg)
+    output_dir = resolve_path(cfg.output_dir)
+    with track_run(
+        cfg,
+        stage="qa_inference",
+        script_path=__file__,
+        output_dir=output_dir,
+        extra_tags={
+            "dataset": getattr(cfg, "dataset", None),
+            "output_name": cfg.output_name,
+        },
+    ) as tracker:
+        tracker.log_params_from_config(cfg)
+        tracker.log_resolved_config(cfg)
+        summary = run_inference(cfg)
+        tracker.log_metrics(
+            {
+                "accuracy": summary["accuracy"],
+                "answered_count": summary["answered_count"],
+                "correct_count": summary["correct_count"],
+                "skipped_existing": summary["skipped_existing"],
+                "processed_now": summary["processed_now"],
+                "missing_video_count": summary["missing_video_count"],
+                "duration_seconds": summary["duration_seconds"],
+            }
+        )
+        tracker.log_artifacts(
+            [
+                summary["output_path"],
+                summary["accuracy_path"],
+                summary["summary_path"],
+                key_frame_path if (key_frame_path := summary.get("key_frame_path")) else None,
+            ],
+            artifact_path="outputs",
+        )
+        tracker.log_artifacts(default_shell_artifact_paths(), artifact_path="logs")
 
 
 if __name__ == "__main__":

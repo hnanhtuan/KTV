@@ -1,0 +1,7 @@
+# @package _global_
+json_path: playground/gt_qa_files/Videomme/val_qa.json
+video_path: datasets/Video-MME/data
+video_frame_tensor_path: ktv/save_tensor/Video-MME
+dataset: Videomme
+device: auto
+output_root: outputs/videomme

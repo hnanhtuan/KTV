@@ -1,8 +1,22 @@
 import argparse
 import json
+import os
 import re
 import string
+import sys
 from collections import defaultdict
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from ktv.core.tracking import (
+    default_shell_artifact_paths,
+    log_accuracy_metrics,
+    track_run,
+    write_summary_json,
+)
 
 
 OPTION_LETTERS = string.ascii_uppercase
@@ -39,7 +53,6 @@ def prediction_to_index(prediction, candidates):
 
     prediction = prediction.strip()
 
-    # Prefer explicit multiple-choice markers such as "C)", "C:", "(C)", or "Answer: C".
     letter_match = re.search(
         r"(?:^|\b|[\(\[])([A-Fa-f])(?:[\)\].:\-]|\b)",
         prediction,
@@ -49,7 +62,6 @@ def prediction_to_index(prediction, candidates):
         if 0 <= index < len(candidates):
             return index
 
-    # Fall back to matching normalized candidate text inside the prediction.
     normalized_prediction = normalize_text(prediction)
     normalized_candidates = [normalize_text(candidate) for candidate in candidates]
     for index, candidate in enumerate(normalized_candidates):
@@ -59,7 +71,7 @@ def prediction_to_index(prediction, candidates):
     return None
 
 
-def compute_accuracy(records):
+def build_accuracy_summary(records):
     """Compute overall and per-task multiple-choice accuracy."""
     totals = defaultdict(lambda: {"correct": 0, "total": 0, "unparsed": 0})
 
@@ -81,21 +93,63 @@ def compute_accuracy(records):
             totals[task_name]["correct"] += 1
             totals["overall"]["correct"] += 1
 
-    return totals
-
-
-def print_accuracy(totals):
-    """Print accuracy summary in a compact, readable format."""
-    for task_name in sorted(totals):
-        stats = totals[task_name]
+    overall = totals["overall"]
+    tasks = {}
+    for task_name, stats in totals.items():
+        if task_name == "overall":
+            continue
         total = stats["total"]
-        correct = stats["correct"]
-        accuracy = correct / total if total else 0.0
+        tasks[task_name] = {
+            "correct": stats["correct"],
+            "total": total,
+            "unparsed": stats["unparsed"],
+            "accuracy": stats["correct"] / total if total else 0.0,
+        }
+
+    total = overall["total"]
+    return {
+        "correct": overall["correct"],
+        "total": total,
+        "unparsed": overall["unparsed"],
+        "accuracy": overall["correct"] / total if total else 0.0,
+        "tasks": tasks,
+    }
+
+
+def compute_accuracy(records):
+    """Backward-compatible accuracy entrypoint used by other scripts."""
+    return build_accuracy_summary(records)
+
+
+def load_accuracy_summary(pred_path):
+    """Return accuracy metrics for one prediction file, or None if absent."""
+    if not os.path.exists(pred_path):
+        return None
+    records = load_jsonl(pred_path)
+    return build_accuracy_summary(records)
+
+
+def print_accuracy(summary):
+    """Print accuracy summary in a compact, readable format."""
+    ordered_sections = [("overall", {
+        "correct": summary["correct"],
+        "total": summary["total"],
+        "unparsed": summary["unparsed"],
+        "accuracy": summary["accuracy"],
+    })]
+    ordered_sections.extend(sorted(summary["tasks"].items()))
+
+    for task_name, stats in ordered_sections:
         print(f"{task_name}:")
-        print(f"  correct: {correct}")
-        print(f"  total: {total}")
+        print(f"  correct: {stats['correct']}")
+        print(f"  total: {stats['total']}")
         print(f"  unparsed: {stats['unparsed']}")
-        print(f"  accuracy: {accuracy:.4f}")
+        print(f"  accuracy: {stats['accuracy']:.4f}")
+
+
+def default_json_output_path(pred_path):
+    pred_path = Path(pred_path)
+    return pred_path.with_name(f"{pred_path.stem}_accuracy.json")
 
 
 def parse_args():
@@ -104,14 +158,40 @@ def parse_args():
         "pred_path",
         help="Path to an inference JSONL file, for example outputs/nextqa_test_cpu.json.",
     )
+    parser.add_argument(
+        "--json-output",
+        default=None,
+        help="Optional JSON path for structured accuracy metrics.",
+    )
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
     records = load_jsonl(args.pred_path)
-    totals = compute_accuracy(records)
-    print_accuracy(totals)
+    summary = build_accuracy_summary(records)
+    print_accuracy(summary)
+
+    json_output = args.json_output or default_json_output_path(args.pred_path)
+    json_output = write_summary_json(json_output, summary)
+
+    output_dir = Path(args.pred_path).resolve().parent
+    with track_run(
+        stage="qa_evaluation",
+        script_path=__file__,
+        output_dir=output_dir,
+        extra_tags={"pred_path": str(Path(args.pred_path).resolve())},
+    ) as tracker:
+        tracker.log_params(
+            {
+                "pred_path": str(Path(args.pred_path).resolve()),
+                "json_output": json_output,
+            }
+        )
+        log_accuracy_metrics(tracker, summary)
+        tracker.log_artifact(args.pred_path, artifact_path="predictions")
+        tracker.log_artifact(json_output, artifact_path="evaluation")
+        tracker.log_artifacts(default_shell_artifact_paths(), artifact_path="logs")
 
 
 if __name__ == "__main__":

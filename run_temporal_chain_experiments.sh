@@ -30,6 +30,7 @@ Strict options (unknown flags fail):
   --lambda-event <float>               Temporal-chain weight (default: 0.5)
   --alpha-gap <float>                  Temporal-chain weight (default: 0.6)
   --beta-redundancy <float>            Temporal-chain weight (default: 0.8)
+  --score-normalizer <name>            Score normalizer for temporal-chain terms (default: minmax)
   --max-frames-to-extract <int>        Temporal-chain frame cap (default: 5400)
   --keyframe-json <path>               Combined keyframe json (default: <output-dir>/keyframe6_order.json)
   --keyframe-impl <single|multiprocess>
@@ -72,6 +73,7 @@ NUM_KEYFRAMES="12"
 LAMBDA_EVENT="0.5"
 ALPHA_GAP="0.6"
 BETA_REDUNDANCY="0.8"
+SCORE_NORMALIZER="minmax"
 MAX_FRAMES_TO_EXTRACT="5400"
 KEYFRAME_JSON=""
 KEYFRAME_IMPL="single"
@@ -123,6 +125,7 @@ apply_resume_parameter() {
     LAMBDA_EVENT) if ! is_explicit "LAMBDA_EVENT"; then LAMBDA_EVENT="${value}"; fi ;;
     ALPHA_GAP) if ! is_explicit "ALPHA_GAP"; then ALPHA_GAP="${value}"; fi ;;
     BETA_REDUNDANCY) if ! is_explicit "BETA_REDUNDANCY"; then BETA_REDUNDANCY="${value}"; fi ;;
+    SCORE_NORMALIZER) if ! is_explicit "SCORE_NORMALIZER"; then SCORE_NORMALIZER="${value}"; fi ;;
     MAX_FRAMES_TO_EXTRACT) if ! is_explicit "MAX_FRAMES_TO_EXTRACT"; then MAX_FRAMES_TO_EXTRACT="${value}"; fi ;;
     KEYFRAME_JSON) if ! is_explicit "KEYFRAME_JSON"; then KEYFRAME_JSON="${value}"; fi ;;
     KEYFRAME_IMPL) if ! is_explicit "KEYFRAME_IMPL"; then KEYFRAME_IMPL="${value}"; fi ;;
@@ -217,6 +220,7 @@ while [[ $# -gt 0 ]]; do
     --lambda-event) require_value "$1" "${2:-}"; LAMBDA_EVENT="$2"; mark_explicit "LAMBDA_EVENT"; shift 2 ;;
     --alpha-gap) require_value "$1" "${2:-}"; ALPHA_GAP="$2"; mark_explicit "ALPHA_GAP"; shift 2 ;;
     --beta-redundancy) require_value "$1" "${2:-}"; BETA_REDUNDANCY="$2"; mark_explicit "BETA_REDUNDANCY"; shift 2 ;;
+    --score-normalizer) require_value "$1" "${2:-}"; SCORE_NORMALIZER="$2"; mark_explicit "SCORE_NORMALIZER"; shift 2 ;;
     --max-frames-to-extract) require_value "$1" "${2:-}"; MAX_FRAMES_TO_EXTRACT="$2"; mark_explicit "MAX_FRAMES_TO_EXTRACT"; shift 2 ;;
     --keyframe-json) require_value "$1" "${2:-}"; KEYFRAME_JSON="$2"; mark_explicit "KEYFRAME_JSON"; shift 2 ;;
     --keyframe-impl) require_value "$1" "${2:-}"; KEYFRAME_IMPL="$2"; mark_explicit "KEYFRAME_IMPL"; shift 2 ;;
@@ -275,6 +279,9 @@ fi
 
 KEYFRAME_PER_SAMPLE_DIR="${OUTPUT_DIR}/keyframes"
 KEYFRAME_JSON="${KEYFRAME_JSON:-${OUTPUT_DIR}/keyframe6_order.json}"
+PRED_PATH="${OUTPUT_DIR}/${OUTPUT_NAME}.json"
+ACC_PATH="${OUTPUT_DIR}/accuracy.txt"
+ACC_JSON_PATH="${OUTPUT_DIR}/accuracy.json"
 
 FEATURE_TENSOR_DIR="dataset-level (from feature/keyframe experiment config)"
 
@@ -325,6 +332,7 @@ PARAM_LOG_PATH="${RUN_DIR}/chosen_parameters.env"
   write_logged_parameter "LAMBDA_EVENT" "${LAMBDA_EVENT}"
   write_logged_parameter "ALPHA_GAP" "${ALPHA_GAP}"
   write_logged_parameter "BETA_REDUNDANCY" "${BETA_REDUNDANCY}"
+  write_logged_parameter "SCORE_NORMALIZER" "${SCORE_NORMALIZER}"
   write_logged_parameter "MAX_FRAMES_TO_EXTRACT" "${MAX_FRAMES_TO_EXTRACT}"
   write_logged_parameter "KEYFRAME_IMPL" "${KEYFRAME_IMPL}"
   write_logged_parameter "FEATURE_TENSOR_DIR" "${FEATURE_TENSOR_DIR}"
@@ -339,6 +347,10 @@ PARAM_LOG_PATH="${RUN_DIR}/chosen_parameters.env"
   write_logged_parameter "KEYFRAME_OVERRIDES" "${KEYFRAME_OVERRIDES[*]:-}"
   write_logged_parameter "INFERENCE_OVERRIDES" "${INFERENCE_OVERRIDES[*]:-}"
 } > "${PARAM_LOG_PATH}"
+
+prepare_experiment_log_files "${RUN_DIR}" "${DATASET_SLUG}_temporal_chain"
+enable_current_shell_logging
+start_parent_mlflow_run "${RUN_DIR}" "${DATASET_SLUG}_temporal_chain"
 
 # Step 5 (optional): run DINOv2 feature extraction.
 if [[ "${RUN_KEYFRAME_SELECT}" == "1" ]]; then
@@ -368,6 +380,7 @@ uv run python "${KEYFRAME_SCRIPT}" \
   lambda_event="${LAMBDA_EVENT}" \
   alpha_gap="${ALPHA_GAP}" \
   beta_redundancy="${BETA_REDUNDANCY}" \
+  score_normalizer="${SCORE_NORMALIZER}" \
   max_frames_to_extract="${MAX_FRAMES_TO_EXTRACT}" \
   "${KEYFRAME_OVERRIDES[@]}" \
   > "${HYDRA_LOG_DIR}/temporal_chain_rank_keyframes.yaml"
@@ -381,6 +394,7 @@ uv run python "${KEYFRAME_SCRIPT}" \
   lambda_event="${LAMBDA_EVENT}" \
   alpha_gap="${ALPHA_GAP}" \
   beta_redundancy="${BETA_REDUNDANCY}" \
+  score_normalizer="${SCORE_NORMALIZER}" \
   max_frames_to_extract="${MAX_FRAMES_TO_EXTRACT}" \
   "${KEYFRAME_OVERRIDES[@]}"
 
@@ -411,3 +425,7 @@ uv run python run_inference_multiple_choice_qa.py \
   rate="${RATE}" \
   tokens_num="${TOKENS_NUM}" \
   "${INFERENCE_OVERRIDES[@]}"
+
+echo "Computing accuracy for ${PRED_PATH}"
+uv run python eval/compute_accuracy.py "${PRED_PATH}" --json-output "${ACC_JSON_PATH}" | tee "${ACC_PATH}"
+echo "Saved accuracy report: ${ACC_PATH}"

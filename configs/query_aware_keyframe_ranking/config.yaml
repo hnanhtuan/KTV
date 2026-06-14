@@ -1,0 +1,34 @@
+defaults:
+  - _self_
+  - experiment: null
+
+json_path: ???
+video_path: ???
+video_frame_tensor_path: ???
+dataset: ???
+device: auto
+output_root: ???
+save_cluster_path: null
+combined_output_path: null
+
+query_mode: question_only
+selection_mode: uniform_12
+dense_candidate_pool_size: 48
+output_top_k: 6
+
+num_keyframes: 12
+max_frames_to_extract: 5400
+skip_existing: true
+sample_limit: null
+
+mlflow:
+  enabled: true
+  tracking_uri: null
+  experiment_name: ktv
+  run_name: null
+  nested: true
+  tags: {}
+
+hydra:
+  job:
+    chdir: false

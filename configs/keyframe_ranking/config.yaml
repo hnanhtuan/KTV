@@ -12,9 +12,14 @@ device: cpu
 
 # Temporal-chain keyframe selection defaults.
 num_keyframes: 12
+enable_query_aware_ranking: true
 lambda_event: 0.5
 alpha_gap: 0.6
 beta_redundancy: 0.8
+first_frame_strategy: cluster_event
+seed_pool_size: 16
+seed_bins: 6
+score_normalizer: minmax
 max_frames_to_extract: 5400
 
 # CLIP Stage 2 precompute defaults. Image features are written to a
@@ -22,6 +27,14 @@ max_frames_to_extract: 5400
 clip_image_batch_size: 128
 clip_text_batch_size: 128
 temp_feature_dir: null
+
+mlflow:
+  enabled: true
+  tracking_uri: null
+  experiment_name: ktv
+  run_name: null
+  nested: true
+  tags: {}
 
 hydra:
   job:

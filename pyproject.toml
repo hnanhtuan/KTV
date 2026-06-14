@@ -8,6 +8,7 @@ dependencies = [
     "decord>=0.6.0",
     "hydra-core>=1.3.2",
     "llava",
+    "mlflow>=2.22.0",
     "numpy<2",
     "omegaconf>=2.3.0",
     "protobuf>=4.25.0",

@@ -36,6 +36,14 @@ prune_mode: null
 rate: null
 tokens_num: 936
 
+mlflow:
+  enabled: true
+  tracking_uri: null
+  experiment_name: ktv
+  run_name: null
+  nested: true
+  tags: {}
+
 hydra:
   job:
     chdir: false

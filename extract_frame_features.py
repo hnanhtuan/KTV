@@ -1,4 +1,6 @@
 import os
+import time
+from pathlib import Path
 
 DEFAULT_HF_HOME = "/tmp/ktv_hf_home"
 STALE_HF_HOME = "/workspace/.hf_home"
@@ -34,6 +36,11 @@ import json
 from hydra.utils import to_absolute_path
 from omegaconf import DictConfig
 from torchvision import transforms
+from ktv.core.tracking import (
+    default_shell_artifact_paths,
+    track_run,
+    write_summary_json,
+)
 
 fast_transform = transforms.Compose(
     [
@@ -335,61 +342,70 @@ def dino_feature_optimized(
 def extract_dinov2_features(json_path, video_path, save_tensor_path, dataset):
     """Extract and save DINOv2 frame features for each video listed in a QA JSON file."""
 
-    if not os.path.exists(save_tensor_path):
-        os.makedirs(save_tensor_path)
-    # video_total = set()
-    video_total = []
-    procesed_videos = set()
-    with open(json_path, "r") as f:
+    start_time = time.time()
+    os.makedirs(save_tensor_path, exist_ok=True)
+    processed_videos = set()
+    unique_videos = set()
+    skipped_existing = 0
+    duplicate_entries = 0
+    missing_video_count = 0
+    failed_video_count = 0
+    saved_count = 0
+
+    with open(json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
-    for i in data:
-        video_total.append(i["question_id"])
-    # data = data[250:]
-    for video in tqdm(data, total=len(video_total)):
+
+    for video in tqdm(data, total=len(data)):
         if dataset == "MLVU_Test":
-            video_name = video["video"]
+            raw_video_name = video["video"]
         else:
-            video_name = video["video_name"]
-        # if video_name=='test_TFS-5.mp4' or video_name=='test_BWB-5.mp4'or video_name=='test_movie101_91.mp4' or video_name=='test_AWD-3.mp4':
-        #     continue
-        # full_video_path = video['video_path']
-        # if dataset=='MLVU_Test':
-        #     folders = [name for name in os.listdir(video_path) if os.path.isdir(os.path.join(video_path, name))]
-        #     # print(folders)
-        #     for folder in folders:
-        #         if video['question_type'] in folder:
-        #             full_video_path = os.path.join(video_path, folder,video_name[5:])
-        #             # print(full_video_path)
-        #     # exit(0)
-        # else:
-        #     full_video_path = os.path.join(video_path, video_name)
-        full_video_path = os.path.join(video_path, video_name)
+            raw_video_name = video["video_name"]
+
+        full_video_path = os.path.join(video_path, raw_video_name)
         if not os.path.exists(full_video_path):
             print("path not exist", full_video_path)
-        video_name = video_name.replace(".mp4", "")
+            missing_video_count += 1
+            continue
+
+        video_name = raw_video_name.replace(".mp4", "")
+        unique_videos.add(video_name)
         output_path = os.path.join(save_tensor_path, f"{video_name}.pkl")
-        # print(save_tensor_path)
-        # print(output_path)
-        # print(output_path)
+
         if os.path.exists(output_path):
+            skipped_existing += 1
             continue
-        if video_name in procesed_videos:
+        if video_name in processed_videos:
+            duplicate_entries += 1
             continue
-        procesed_videos.add(video_name)
-        if os.path.exists(output_path):
-            continue
-        # data_type = video['data_type']
-        # print('type',video['data_type'])
-        # if video['ts']:
-        #     ts = [video['start'], video['end']]
-        # else:
-        #     ts = None
-        # frame_features = dino_feature_optimized(full_video_path, data_type, ts,batch_size=2000)
+
+        processed_videos.add(video_name)
         frame_features = dino_feature_optimized(full_video_path, batch_size=1000)
         if frame_features:
             temp = {video_name: frame_features}
             with open(output_path, "wb") as f:
                 pickle.dump(temp, f)
+            saved_count += 1
+        else:
+            failed_video_count += 1
+
+    summary_path = os.path.join(save_tensor_path, "extract_frame_features_summary.json")
+    summary = {
+        "dataset": dataset,
+        "json_path": str(Path(json_path).resolve()),
+        "video_path": str(Path(video_path).resolve()),
+        "save_tensor_path": str(Path(save_tensor_path).resolve()),
+        "summary_path": str(Path(summary_path).resolve()),
+        "question_count": len(data),
+        "unique_videos": len(unique_videos),
+        "saved_count": saved_count,
+        "skipped_existing": skipped_existing,
+        "duplicate_entries": duplicate_entries,
+        "missing_video_count": missing_video_count,
+        "failed_video_count": failed_video_count,
+        "duration_seconds": time.time() - start_time,
+    }
+    summary["summary_path"] = write_summary_json(summary_path, summary)
+    return summary
 
 
 def resolve_path(path):
@@ -406,13 +422,36 @@ def resolve_path(path):
     config_path="configs/frame_feature_extraction", config_name="config", version_base=None
 )
 def main(cfg: DictConfig):
-    load_dino_model(cfg.device)
-    extract_dinov2_features(
-        resolve_path(cfg.json_path),
-        resolve_path(cfg.video_path),
-        resolve_path(cfg.save_tensor_path),
-        cfg.dataset,
-    )
+    output_dir = resolve_path(cfg.save_tensor_path)
+    with track_run(
+        cfg,
+        stage="feature_extraction",
+        script_path=__file__,
+        output_dir=output_dir,
+        extra_tags={"dataset": cfg.dataset},
+    ) as tracker:
+        tracker.log_params_from_config(cfg)
+        tracker.log_resolved_config(cfg)
+        load_dino_model(cfg.device)
+        summary = extract_dinov2_features(
+            resolve_path(cfg.json_path),
+            resolve_path(cfg.video_path),
+            output_dir,
+            cfg.dataset,
+        )
+        tracker.log_metrics(
+            {
+                "saved_count": summary["saved_count"],
+                "skipped_existing": summary["skipped_existing"],
+                "duplicate_entries": summary["duplicate_entries"],
+                "missing_video_count": summary["missing_video_count"],
+                "failed_video_count": summary["failed_video_count"],
+                "unique_videos": summary["unique_videos"],
+                "duration_seconds": summary["duration_seconds"],
+            }
+        )
+        tracker.log_artifact(summary["summary_path"], artifact_path="summary")
+        tracker.log_artifacts(default_shell_artifact_paths(), artifact_path="logs")
 
 
 if __name__ == "__main__":

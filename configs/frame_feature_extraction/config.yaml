@@ -8,6 +8,14 @@ save_tensor_path: ???
 dataset: NExTQA
 device: cpu
 
+mlflow:
+  enabled: true
+  tracking_uri: null
+  experiment_name: ktv
+  run_name: null
+  nested: true
+  tags: {}
+
 hydra:
   job:
     chdir: false

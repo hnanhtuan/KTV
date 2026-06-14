@@ -12,3 +12,4 @@ ktv/save_tensor/
 **.ipynb_checkpoints/
 ktv.egg-info/
 datasets_raw/
+mlruns/

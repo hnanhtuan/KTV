@@ -131,6 +131,9 @@ class LlavaLlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
         image_sizes: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> Union[GenerateOutput, torch.LongTensor]:
+        # `generate` accepts the same multimodal controls as `forward`, but it
+        # must convert them into `inputs_embeds` before delegating to the
+        # Hugging Face generation loop.
         position_ids = kwargs.pop("position_ids", None)
         attention_mask = kwargs.pop("attention_mask", None)
         keyframe_order = kwargs.pop("keyframe_order", None)
@@ -141,10 +144,17 @@ class LlavaLlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
         global_rate = kwargs.pop("global_rate", None)
         tokens_num = kwargs.pop("tokens_num", None)
         # tokens_num = tokens_num[0]
+        # This wrapper only supports token ids as the entry point. Multimodal
+        # inputs are fused through `prepare_inputs_labels_for_multimodal`, so we
+        # explicitly reject precomputed embeddings here.
         if "inputs_embeds" in kwargs:
             raise NotImplementedError("`inputs_embeds` is not supported")
 
         if images is not None:
+            # When images are provided, expand the prompt into the combined
+            # text+vision embedding sequence expected by the base LLaMA model.
+            # This helper also returns updated position ids and attention mask
+            # because inserting visual tokens changes the final sequence layout.
             (inputs, position_ids, attention_mask, _, inputs_embeds, _) = (
                 self.prepare_inputs_labels_for_multimodal(
                     inputs,
@@ -163,7 +173,12 @@ class LlavaLlamaForCausalLM(LlamaForCausalLM, LlavaMetaForCausalLM):
                 )
             )
         else:
+            # Text-only generation follows the standard LLaMA path: look up token
+            # embeddings directly from the language model embedding table.
             inputs_embeds = self.get_model().embed_tokens(inputs)
+
+        # Hand off to the parent `generate`, passing embeddings instead of raw
+        # token ids so the generation loop starts from the already-fused prompt.
         return super().generate(
             position_ids=position_ids,
             attention_mask=attention_mask,
