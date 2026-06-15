@@ -256,7 +256,26 @@ UPPER_BOUND_NUM_FRAMES_LIST="12 16 20 24 28 32 36 40 44 48" \
 bash run_all_tokens_experiments.sh
 ```
 
-## 6) Output Files
+## 6) MLflow Tracking UI
+
+Experiment tracking is handled via MLflow, logging metrics and parameters to the local `mlruns/` directory.
+
+To start the MLflow server:
+
+```bash
+uv run mlflow ui --backend-store-uri mlruns --host 0.0.0.0 --port 5000
+```
+
+Or, using the active virtual environment:
+
+```bash
+source .venv/bin/activate
+mlflow ui --backend-store-uri mlruns --host 0.0.0.0 --port 5000
+```
+
+Once started, open `http://localhost:5000` in your browser to view experiment metrics, parameters, and logs.
+
+## 7) Output Files
 
 Inference predictions are written to:
 - `outputs/<dataset>/<setting>/<output_name>.json`
@@ -268,7 +287,7 @@ Keyframe clustering outputs are written to:
 - per-sample keyframes: `outputs/<dataset>/keyframe_selection/keyframes/`
 - combined JSON: `outputs/<dataset>/keyframe_selection/keyframe6_order.json`
 
-## 7) Notes and Troubleshooting
+## 8) Notes and Troubleshooting
 
 - If OOM happens, reduce `num_frames` and/or `tokens_num`.
 - For CPU runs, override `device=cpu` (much slower).

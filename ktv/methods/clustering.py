@@ -13,6 +13,7 @@ from PIL import Image
 
 from ktv.core.dataset import load_video
 from ktv.core.tracking import write_summary_json
+from ktv.core.utils import resolve_path
 
 device = "cpu"
 model_clip = None

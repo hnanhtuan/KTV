@@ -657,6 +657,7 @@ def run_temporal_chain(
     dataset,
     combined_output_path=None,
     num_keyframes=12,
+    enable_query_aware_ranking=True,
     lambda_event=0.5,
     alpha_gap=0.6,
     beta_redundancy=0.8,
@@ -749,7 +750,8 @@ def run_temporal_chain(
                 stage1_results[item["video_name"]] = item
 
     # Stage 2 CLIP text-matching ranking
-    base.load_clip_model("auto") # load CLIP model
+    if enable_query_aware_ranking:
+        base.load_clip_model("auto") # load CLIP model
     missing_tensor_count = 0
     skipped_empty_frame_count = 0
     saved_count = 0
@@ -768,6 +770,24 @@ def run_temporal_chain(
 
         candidate_frame_indices = item["candidate_frame_indices"]
         full_video_path = os.path.join(video_path, video_name)
+
+        if not enable_query_aware_ranking:
+            key_frame_order = [
+                [frame_index, rank]
+                for rank, frame_index in enumerate(candidate_frame_indices)
+            ]
+            result = {question_id: key_frame_order}
+            combined_results.update(result)
+            with open(output_path, "w", encoding="utf-8") as f:
+                json.dump(
+                    result,
+                    f,
+                    ensure_ascii=False,
+                    indent=4,
+                    default=lambda o: int(o) if isinstance(o, np.integer) else o,
+                )
+            saved_count += 1
+            continue
 
         frames_cluster, _ = load_video(
             full_video_path,

@@ -14,6 +14,7 @@ from tqdm import tqdm
 
 import ktv.methods.clustering as base
 from ktv.core.tracking import write_summary_json
+from ktv.core.utils import resolve_path
 
 QUERY_MODE_QUESTION_ONLY = "question_only"
 QUERY_MODE_QUESTION_PLUS_OPTIONS = "question_plus_options"

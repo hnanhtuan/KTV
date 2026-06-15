@@ -1,8 +1,6 @@
-#
-# For licensing see accompanying LICENSE file.
-# Copyright (C) 2024 Apple Inc. All Rights Reserved.
-#
+import os
 import math
+from hydra.utils import to_absolute_path
 
 
 def split_list(lst, n):
@@ -14,3 +12,14 @@ def split_list(lst, n):
 def get_chunk(lst, n, k):
     chunks = split_list(lst, n)
     return chunks[k]
+
+
+def resolve_path(path):
+    """Resolve local Hydra config paths relative to the original launch directory."""
+    if path is None:
+        return None
+    path = os.path.expanduser(path)
+    if os.path.isabs(path):
+        return path
+    return to_absolute_path(path)
+

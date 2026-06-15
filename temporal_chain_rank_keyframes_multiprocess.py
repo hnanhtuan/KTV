@@ -33,6 +33,7 @@ def main(cfg: DictConfig):
             dataset=cfg.dataset,
             combined_output_path=resolve_path(cfg.combined_output_path),
             num_keyframes=getattr(cfg, "num_keyframes", 12),
+            enable_query_aware_ranking=getattr(cfg, "enable_query_aware_ranking", True),
             lambda_event=getattr(cfg, "lambda_event", 0.5),
             alpha_gap=getattr(cfg, "alpha_gap", 0.6),
             beta_redundancy=getattr(cfg, "beta_redundancy", 0.8),
