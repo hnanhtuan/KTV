@@ -260,14 +260,8 @@ def _as_numpy_features(frame_features):
     return frame_features
 
 
-def _build_scoring_state(frame_features, num_keyframes, lambda_event, score_normalizer):
-    kmeans = KMeans(
-        n_clusters=num_keyframes, random_state=0, init="k-means++", n_init=10
-    ).fit(frame_features)
-    labels = kmeans.labels_
-    centers = kmeans.cluster_centers_
-
-    r_cluster = -np.linalg.norm(frame_features - centers[labels], axis=1)
+def _build_scoring_state(frame_features, num_keyframes, lambda_event, score_normalizer, clustering_method="kmeans"):
+    labels, centers, r_cluster = base.perform_clustering(frame_features, num_keyframes, clustering_method)
     r_event = compute_event_score(frame_features, num_keyframes)
     cluster_score = normalize_scores(r_cluster, score_normalizer)
     event_score = normalize_scores(r_event, score_normalizer)
@@ -480,6 +474,7 @@ def temporal_chain_select(
     seed_pool_size=16,
     seed_bins=6,
     score_normalizer=DEFAULT_SCORE_NORMALIZER,
+    clustering_method="kmeans",
 ):
     frame_features = _as_numpy_features(frame_features)
     n = frame_features.shape[0]
@@ -493,7 +488,7 @@ def temporal_chain_select(
     strategy = normalize_strategy_name(first_frame_strategy)
     score_normalizer = normalize_score_normalizer_name(score_normalizer)
     k = min(int(num_keyframes), n)
-    state = _build_scoring_state(frame_features, k, lambda_event, score_normalizer)
+    state = _build_scoring_state(frame_features, k, lambda_event, score_normalizer, clustering_method)
 
     if strategy == "lookahead":
         return _select_chain_by_lookahead(
@@ -531,6 +526,7 @@ _WORKER_SEED_BINS = 6
 _WORKER_SCORE_NORMALIZER = DEFAULT_SCORE_NORMALIZER
 _WORKER_MAX_FRAMES_TO_EXTRACT = 5400
 _WORKER_BLAS_THREADS = 1
+_WORKER_CLUSTERING_METHOD = "kmeans"
 
 
 def _limit_threads_context():
@@ -551,10 +547,12 @@ def _init_stage1_worker(
     score_normalizer,
     max_frames_to_extract,
     worker_blas_threads,
+    clustering_method="kmeans",
 ):
     global _WORKER_VIDEO_FRAME_TENSOR, _WORKER_NUM_KEYFRAMES, _WORKER_LAMBDA_EVENT, _WORKER_ALPHA_GAP
     global _WORKER_BETA_REDUNDANCY, _WORKER_FIRST_FRAME_STRATEGY, _WORKER_SEED_POOL_SIZE, _WORKER_SEED_BINS
     global _WORKER_SCORE_NORMALIZER, _WORKER_MAX_FRAMES_TO_EXTRACT, _WORKER_BLAS_THREADS
+    global _WORKER_CLUSTERING_METHOD
 
     _WORKER_VIDEO_FRAME_TENSOR = video_frame_tensor
     _WORKER_NUM_KEYFRAMES = num_keyframes
@@ -600,6 +598,7 @@ def _prepare_stage1_for_video(task):
                 seed_pool_size=_WORKER_SEED_POOL_SIZE,
                 seed_bins=_WORKER_SEED_BINS,
                 score_normalizer=_WORKER_SCORE_NORMALIZER,
+                clustering_method=_WORKER_CLUSTERING_METHOD,
             )
         else:
             with ctx:
@@ -613,6 +612,7 @@ def _prepare_stage1_for_video(task):
                     seed_pool_size=_WORKER_SEED_POOL_SIZE,
                     seed_bins=_WORKER_SEED_BINS,
                     score_normalizer=_WORKER_SCORE_NORMALIZER,
+                    clustering_method=_WORKER_CLUSTERING_METHOD,
                 )
 
         candidate_frame_indices = [
@@ -670,6 +670,7 @@ def run_temporal_chain(
     worker_blas_threads=1,
     start_method="fork",
     chunksize=None,
+    clustering_method="kmeans",
 ):
     start_time = time.time()
     os.makedirs(save_cluster_path, exist_ok=True)
@@ -720,6 +721,7 @@ def run_temporal_chain(
             score_normalizer,
             max_frames_to_extract,
             worker_blas_threads,
+            clustering_method,
         )
         for task in tqdm(video_tasks, total=len(video_tasks), desc="Stage 1 keyframe select"):
             item = _prepare_stage1_for_video(task)
@@ -743,6 +745,7 @@ def run_temporal_chain(
                 score_normalizer,
                 max_frames_to_extract,
                 worker_blas_threads,
+                clustering_method,
             ),
         ) as pool:
             iterator = pool.imap_unordered(_prepare_stage1_for_video, video_tasks, chunksize=chunksize)
@@ -868,6 +871,7 @@ def run_temporal_chain(
         "beta_redundancy": beta_redundancy,
         "first_frame_strategy": first_frame_strategy,
         "score_normalizer": score_normalizer,
+        "clustering_method": clustering_method,
         "duration_seconds": time.time() - start_time,
     }
     summary["summary_path"] = write_summary_json(summary_path, summary)

@@ -36,6 +36,7 @@ def main(cfg: DictConfig):
             score_normalizer=getattr(cfg, "score_normalizer", DEFAULT_SCORE_NORMALIZER),
             max_frames_to_extract=getattr(cfg, "max_frames_to_extract", 5400),
             num_workers=1,
+            clustering_method=getattr(cfg, "clustering_method", "kmeans"),
         )
         tracker.log_metrics(
             {

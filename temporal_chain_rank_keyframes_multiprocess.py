@@ -46,6 +46,7 @@ def main(cfg: DictConfig):
             worker_blas_threads=getattr(cfg, "worker_blas_threads", 1),
             start_method=getattr(cfg, "mp_start_method", "fork"),
             chunksize=getattr(cfg, "mp_chunksize", None),
+            clustering_method=getattr(cfg, "clustering_method", "kmeans"),
         )
         tracker.log_metrics(
             {

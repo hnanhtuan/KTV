@@ -13,6 +13,7 @@ device: cpu
 # Temporal-chain keyframe selection defaults.
 num_keyframes: 12
 enable_query_aware_ranking: true
+clustering_method: kmeans
 lambda_event: 0.5
 alpha_gap: 0.6
 beta_redundancy: 0.8

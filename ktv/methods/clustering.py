@@ -39,15 +39,137 @@ def load_clip_model(device_name):
     print(f"Using CLIP device: {device}")
 
 
-def video_frame_clustering(frame_features: np.ndarray, num_cluster: int = 5):
-    kmeans = KMeans(
-        n_clusters=num_cluster, random_state=0, init="k-means++", n_init=10
-    ).fit(frame_features)
-    labels = kmeans.labels_
-    cluster_centers = kmeans.cluster_centers_
-    distances = np.linalg.norm(
-        frame_features - cluster_centers[:, np.newaxis, :], axis=2
-    )
+def run_kmedoids(features: np.ndarray, num_clusters: int, metric: str = "cosine", max_iter: int = 100, random_state: int = 0):
+    np.random.seed(random_state)
+    n_samples = features.shape[0]
+    if n_samples <= num_clusters:
+        return list(range(n_samples)) + [0] * (num_clusters - n_samples)
+    
+    if metric == "cosine":
+        norms = np.linalg.norm(features, axis=1, keepdims=True)
+        norms[norms == 0] = 1.0
+        normalized = features / norms
+        dist_matrix = 1.0 - np.dot(normalized, normalized.T)
+        dist_matrix = np.clip(dist_matrix, 0.0, 2.0)
+    else:  # l2
+        sq_norms = np.sum(features ** 2, axis=1)
+        dot_prods = np.dot(features, features.T)
+        dist_sq = sq_norms[:, np.newaxis] + sq_norms[np.newaxis, :] - 2 * dot_prods
+        dist_matrix = np.sqrt(np.maximum(dist_sq, 0.0))
+        
+    # k-means++ initialization on distance matrix
+    medoids = [np.random.choice(n_samples)]
+    for _ in range(1, num_clusters):
+        min_dist = np.min(dist_matrix[:, medoids], axis=1)
+        sq_dist = min_dist ** 2
+        sum_sq_dist = np.sum(sq_dist)
+        if sum_sq_dist == 0:
+            probs = np.ones(n_samples) / n_samples
+        else:
+            probs = sq_dist / sum_sq_dist
+        new_medoid = np.random.choice(n_samples, p=probs)
+        medoids.append(new_medoid)
+    medoids = np.array(medoids)
+    
+    for _ in range(max_iter):
+        labels = np.argmin(dist_matrix[:, medoids], axis=1)
+        new_medoids = medoids.copy()
+        
+        for k in range(num_clusters):
+            cluster_indices = np.where(labels == k)[0]
+            if len(cluster_indices) == 0:
+                continue
+            sub_dist = dist_matrix[cluster_indices][:, cluster_indices]
+            costs = np.sum(sub_dist, axis=1)
+            new_medoids[k] = cluster_indices[np.argmin(costs)]
+            
+        if np.array_equal(new_medoids, medoids):
+            break
+        medoids = new_medoids
+        
+    return medoids.tolist()
+
+
+def perform_clustering(frame_features: np.ndarray, num_clusters: int, clustering_method: str = "kmeans"):
+    n_samples = frame_features.shape[0]
+    num_clusters = min(num_clusters, n_samples)
+    
+    if num_clusters <= 0:
+        return np.zeros(n_samples, dtype=int), np.zeros((0, frame_features.shape[1]), dtype=np.float32), np.zeros(n_samples, dtype=np.float32)
+
+    method = clustering_method.lower().strip()
+    
+    if method == "kmeans":
+        kmeans = KMeans(
+            n_clusters=num_clusters, random_state=0, init="k-means++", n_init=10
+        ).fit(frame_features)
+        labels = kmeans.labels_
+        centers = kmeans.cluster_centers_
+        r_cluster = -np.linalg.norm(frame_features - centers[labels], axis=1)
+        return labels, centers, r_cluster
+        
+    elif method.startswith("kmedoids"):
+        metric = "cosine" if "cosine" in method else "l2"
+        medoid_indices = run_kmedoids(frame_features, num_clusters, metric=metric, random_state=0)
+        centers = frame_features[medoid_indices]
+        
+        if metric == "cosine":
+            norm_features = frame_features / (np.linalg.norm(frame_features, axis=1, keepdims=True) + 1e-8)
+            norm_centers = centers / (np.linalg.norm(centers, axis=1, keepdims=True) + 1e-8)
+            dist_matrix = 1.0 - np.dot(norm_features, norm_centers.T)
+        else:
+            dist_matrix = np.linalg.norm(frame_features[:, np.newaxis, :] - centers[np.newaxis, :, :], axis=2)
+            
+        labels = np.argmin(dist_matrix, axis=1)
+        r_cluster = -dist_matrix[np.arange(n_samples), labels]
+        return labels, centers, r_cluster
+        
+    elif method.startswith("agglomerative"):
+        from sklearn.cluster import AgglomerativeClustering
+        metric = "cosine" if "cosine" in method else "l2"
+        linkage = "average"
+        sklearn_metric = "cosine" if metric == "cosine" else "euclidean"
+        
+        agg = AgglomerativeClustering(
+            n_clusters=num_clusters, metric=sklearn_metric, linkage=linkage
+        )
+        labels = agg.fit_predict(frame_features)
+        
+        centers = []
+        for k in range(num_clusters):
+            cluster_members = frame_features[labels == k]
+            if len(cluster_members) == 0:
+                centers.append(np.zeros_like(frame_features[0]))
+            else:
+                centers.append(cluster_members.mean(axis=0))
+        centers = np.array(centers)
+        
+        if metric == "cosine":
+            norm_features = frame_features / (np.linalg.norm(frame_features, axis=1, keepdims=True) + 1e-8)
+            norm_centers = centers / (np.linalg.norm(centers, axis=1, keepdims=True) + 1e-8)
+            dist_matrix = 1.0 - np.dot(norm_features, norm_centers.T)
+        else:
+            dist_matrix = np.linalg.norm(frame_features[:, np.newaxis, :] - centers[np.newaxis, :, :], axis=2)
+            
+        r_cluster = -dist_matrix[np.arange(n_samples), labels]
+        return labels, centers, r_cluster
+        
+    else:
+        raise ValueError(f"Unknown clustering_method: {clustering_method}")
+
+
+def video_frame_clustering(frame_features: np.ndarray, num_cluster: int = 5, clustering_method: str = "kmeans"):
+    labels, centers, r_cluster = perform_clustering(frame_features, num_cluster, clustering_method)
+    
+    metric = "cosine" if "cosine" in clustering_method.lower() else "l2"
+    if metric == "cosine":
+        norm_features = frame_features / (np.linalg.norm(frame_features, axis=1, keepdims=True) + 1e-8)
+        norm_centers = centers / (np.linalg.norm(centers, axis=1, keepdims=True) + 1e-8)
+        distances = 1.0 - np.dot(norm_centers, norm_features.T)
+    else:
+        distances = np.linalg.norm(
+            frame_features - centers[:, np.newaxis, :], axis=2
+        )
     closest_frames = np.argmin(distances, axis=1)
     cluster_center_indices = [int(closest_frames[j]) for j in range(num_cluster)]
     return cluster_center_indices
@@ -139,6 +261,7 @@ def run_clustering(
     num_keyframes=12,
     enable_query_aware_ranking=True,
     max_frames_to_extract=5400,
+    clustering_method="kmeans",
 ):
     start_time = time.time()
     os.makedirs(save_cluster_path, exist_ok=True)
@@ -177,7 +300,7 @@ def run_clustering(
             missing_tensor_count += 1
             continue
 
-        clustered_indices = video_frame_clustering(tensor, num_keyframes)
+        clustered_indices = video_frame_clustering(tensor, num_keyframes, clustering_method)
 
         candidate_frame_indices = [
             get_original_frame_number(
@@ -293,6 +416,7 @@ def run_clustering(
         "missing_tensor_count": missing_tensor_count,
         "skipped_empty_frame_count": skipped_empty_frame_count,
         "enable_query_aware_ranking": bool(enable_query_aware_ranking),
+        "clustering_method": clustering_method,
         "num_keyframes": num_keyframes,
         "duration_seconds": time.time() - start_time,
     }

@@ -256,21 +256,21 @@ UPPER_BOUND_NUM_FRAMES_LIST="12 16 20 24 28 32 36 40 44 48" \
 bash run_all_tokens_experiments.sh
 ```
 
-## 6) MLflow Tracking UI
+## 6) MLflow Tracking GUI / UI
 
 Experiment tracking is handled via MLflow, logging metrics and parameters to the local `mlruns/` directory.
 
-To start the MLflow server:
+To start the MLflow GUI / server:
 
 ```bash
-uv run mlflow ui --backend-store-uri mlruns --host 0.0.0.0 --port 5000
+MLFLOW_ALLOW_FILE_STORE=true uv run mlflow ui --backend-store-uri mlruns --host 0.0.0.0 --port 5000
 ```
 
 Or, using the active virtual environment:
 
 ```bash
 source .venv/bin/activate
-mlflow ui --backend-store-uri mlruns --host 0.0.0.0 --port 5000
+MLFLOW_ALLOW_FILE_STORE=true mlflow ui --backend-store-uri mlruns --host 0.0.0.0 --port 5000
 ```
 
 Once started, open `http://localhost:5000` in your browser to view experiment metrics, parameters, and logs.

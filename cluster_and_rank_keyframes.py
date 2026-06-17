@@ -33,6 +33,7 @@ def main(cfg: DictConfig):
             num_keyframes=getattr(cfg, "num_keyframes", 12),
             enable_query_aware_ranking=getattr(cfg, "enable_query_aware_ranking", True),
             max_frames_to_extract=getattr(cfg, "max_frames_to_extract", 5400),
+            clustering_method=getattr(cfg, "clustering_method", "kmeans"),
         )
         tracker.log_metrics(
             {
