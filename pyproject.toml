@@ -18,6 +18,7 @@ dependencies = [
     "pyarrow>=24.0.0",
     "yt-dlp>=2026.3.17",
     "opencv-python-headless>=4.11.0.86",
+    "nbformat>=5.10.4",
 ]
 
 [[tool.uv.index]]
